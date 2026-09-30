@@ -105,7 +105,7 @@ A primeira versão de produção roda em **Vercel + Supabase**, não mais em Sit
 
 | Antes | Agora |
 |---|---|
-| Vinext/Vite + Cloudflare Worker | Next.js 16 (App Router) na Vercel, região `gru1` |
+| Vinext/Vite + Cloudflare Worker | Next.js 16 (App Router) na Vercel, região `iad1` (mesma do banco, us-east-1) |
 | D1 (SQLite) + Drizzle | Supabase Postgres via `postgres.js` (pooler, `prepare:false`); schema em `supabase/migrations/` |
 | R2 | Supabase Storage, bucket privado `imports` (arquivo enviado por URL assinada) |
 | Cabeçalhos de identidade do Sites | Supabase Auth (`getUser()` no servidor), `proxy.ts` para páginas, 401 nas APIs |

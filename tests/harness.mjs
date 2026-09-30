@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import ts from 'typescript';
 import {PGlite} from '@electric-sql/pglite';
-const libs=['presence-stock','model','imports','totals','catalog','report','operations','demo-operations','pg-adapter','db'];
+const libs=['presence-stock','model','imports','totals','catalog','report','operations','demo-operations','pg-adapter','config','db'];
 const transpile=src=>ts.transpileModule(src,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
 export async function setup(name){
  const tmp=await fs.mkdtemp(path.join(os.tmpdir(),`mondepars-${name}-`));

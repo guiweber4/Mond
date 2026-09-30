@@ -1,14 +1,20 @@
 import type {Sql,ParameterOrJSON} from 'postgres';
 import type {SupabaseClient} from '@supabase/supabase-js';
 import {database as wrap,type Database,type Runner} from './pg-adapter';
+import {poolerCandidates} from './config';
 let runner:Runner|undefined,files:Files|undefined;
 /** Tests inject PGlite and an in-memory store; production connects on first use. */
 export function useBackends(r:Runner,f:Files){runner=r;files=f}
 function env(name:string){const v=process.env[name];if(!v)throw new Error('Serviço indisponível: configuração do servidor incompleta.');return v}
 function postgresRunner():Runner{
- let client:Sql|undefined;
+ let client:Promise<Sql>|undefined;
  // Supabase pooler (transaction mode) does not support prepared statements.
- const get=async()=>client??=(await import('postgres')).default(env('DATABASE_URL'),{prepare:false,max:3,idle_timeout:20,connect_timeout:10});
+ const connect=async()=>{const postgres=(await import('postgres')).default,urls=poolerCandidates(env('DATABASE_URL'));
+  for(const [i,url] of urls.entries()){const sql=postgres(url,{prepare:false,max:3,idle_timeout:20,connect_timeout:10});
+   // Only the aws-0/aws-1 guess is retried; any other failure (password, network) surfaces as is.
+   try{if(urls.length>1)await sql`select 1`;return sql}catch(e){await sql.end({timeout:1}).catch(()=>{});if(i<urls.length-1&&/tenant or user not found/i.test(String((e as Error).message)))continue;throw e}}
+  throw new Error('Banco indisponível.')};
+ const get=()=>client??=connect().catch(e=>{client=undefined;throw e});
  const args=(p:unknown[])=>p as ParameterOrJSON<never>[];
  return {query:async(text,params)=>[...await (await get()).unsafe(text,args(params))],transaction:async fn=>(await (await get()).begin(tx=>fn({query:async(text,params)=>[...await tx.unsafe(text,args(params))]}))) as Awaited<ReturnType<typeof fn>>};
 }

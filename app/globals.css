@@ -164,3 +164,19 @@ h1{font-weight:500;letter-spacing:-.4px}
 .signout-button:hover{background:#ffffff14}
 .login-card h1{font-family:var(--font-display);font-weight:500;color:var(--ink)}
 .login-field input{font-weight:400}
+
+/* ── IA: resultados e apresentação executiva ───────────────────── */
+.ai-assist .panel-head h2{font-family:var(--font-display);font-size:22px;font-weight:600;color:var(--ink)}
+.ai-assist .ai-result{padding:0 24px 20px}
+.ai-assist .error-box{margin:0 24px 16px}
+.ai-prose{white-space:pre-wrap;line-height:1.7;font-size:14px;color:var(--ink-2);background:#fafbfc;border:1px solid var(--line-soft);border-radius:8px;padding:16px 18px}
+.spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+.slide-deck{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;margin-bottom:12px}
+.slide-actions{grid-column:1/-1;display:flex;justify-content:flex-end}
+.slide{position:relative;aspect-ratio:16/9;min-height:210px;background:linear-gradient(160deg,#253338 0%,#2c4650 100%);color:#eef3f5;border-radius:10px;padding:22px 24px;display:flex;flex-direction:column;gap:10px;overflow:hidden;break-inside:avoid}
+.slide h3{margin:0;font-family:var(--font-display);font-size:22px;font-weight:600;color:#fff;line-height:1.2}
+.slide ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:13.5px;line-height:1.45}
+.slide-number{position:absolute;top:16px;right:20px;font-family:var(--font-display);font-size:15px;color:#9fb6bf}
+.slide-note{margin:auto 0 0;font-size:12px;color:#b8c9cf;border-top:1px solid #ffffff22;padding-top:8px}
+@media(max-width:767px){.ai-assist .ai-result{padding:0 16px 16px}.slide-deck{grid-template-columns:1fr}.slide{aspect-ratio:auto}}
+@media print{.slide-deck{grid-template-columns:1fr}.slide{aspect-ratio:16/9;page-break-inside:avoid;margin-bottom:12px;-webkit-print-color-adjust:exact;print-color-adjust:exact}}

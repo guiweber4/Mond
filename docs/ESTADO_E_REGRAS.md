@@ -125,3 +125,7 @@ Pendências desta etapa: provisionar o projeto Supabase e o projeto Vercel (exig
 - Use o **domínio de produção** da Vercel, não a URL de um deploy específico (ela congela código e variáveis).
 - `/api/health` (PR #5) mostra o host do banco em uso, ambiente e commit do deploy.
 - Próximo passo: importar as 7 planilhas em produção e conferir JK = 540 variações · 1.536 peças · R$ 1.291.617,77; configurar Site URL/Redirect URL no Supabase Auth para o link por e-mail.
+
+## IA por finalidade (30/09/2026)
+
+`lib/ai-core.ts` define cinco finalidades com instruções e limites próprios: análise do período, leitura de relatório (anexada ao relatório salvo), apresentação executiva (slides `## Título` + marcadores, salva em Relatórios), abastecimento e plano de ação. `lib/ai-context.ts` monta o contexto só com números calculados: vendas consolidadas do período mais recente, saldo por unidade/categoria, sinais vendas × estoque por referência (vendeu e está com saldo ≤ 1, com saldo em outras unidades; saldo ≥ 5 sem venda no período) e, quando houver vendas transacionais, riscos/decisões/qualidade do abastecimento. Sem vendas diárias, a IA é instruída a não estimar consumo, cobertura ou quantidades. Gerar é liberado a qualquer usuário logado; chaves e conexões continuam só com o administrador. Limite global por hora: `AI_HOURLY_LIMIT` (padrão 30). Teste: `tests/ai.test.mjs`.

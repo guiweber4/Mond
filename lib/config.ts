@@ -6,18 +6,18 @@ function url(v:string){try{const u=new URL(v);return u.protocol==='https:'||u.pr
 /** Only the two public variables: the proxy and the login page cannot run without them. */
 export function publicConfigIssues(env:Record<string,string|undefined>={NEXT_PUBLIC_SUPABASE_URL:process.env.NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY:process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}):ConfigIssue[]{
  const out:ConfigIssue[]=[],u=env.NEXT_PUBLIC_SUPABASE_URL,k=env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
- if(!has(u))out.push({name:'NEXT_PUBLIC_SUPABASE_URL',problem:'não cadastrada (ou cadastrada depois do último deploy)',required:true});
+ if(!has(u))out.push({name:'NEXT_PUBLIC_SUPABASE_URL',problem:'não cadastrada (ou cadastrada depois do último deploy); aceita também SUPABASE_URL',required:true});
  else if(dirty(u!))out.push({name:'NEXT_PUBLIC_SUPABASE_URL',problem:'tem aspas ou espaços; cole só o endereço',required:true});
  else{const p=url(u!);if(!p)out.push({name:'NEXT_PUBLIC_SUPABASE_URL',problem:'não é um endereço válido; use o Project URL, ex.: https://abcd.supabase.co',required:true});else if(p.pathname!=='/'&&p.pathname!=='')out.push({name:'NEXT_PUBLIC_SUPABASE_URL',problem:'deve ser só o endereço do projeto, sem /rest/v1 ou outro caminho',required:true});else if(p.hostname.includes('supabase.com'))out.push({name:'NEXT_PUBLIC_SUPABASE_URL',problem:'é o endereço do painel; use o Project URL (termina em .supabase.co)',required:true})}
- if(!has(k))out.push({name:'NEXT_PUBLIC_SUPABASE_ANON_KEY',problem:'não cadastrada (ou cadastrada depois do último deploy)',required:true});
- else if(dirty(k!))out.push({name:'NEXT_PUBLIC_SUPABASE_ANON_KEY',problem:'tem aspas ou espaços; cole só a chave',required:true});
- else if(/^sb_secret_/.test(k!))out.push({name:'NEXT_PUBLIC_SUPABASE_ANON_KEY',problem:'recebeu a chave secreta; aqui vai a chave publishable/anon',required:true});
+ if(!has(k))out.push({name:'SUPABASE_PUBLISHABLE_KEY',problem:'chave pública do Supabase não cadastrada (ou cadastrada depois do último deploy); aceita também SUPABASE_ANON_KEY',required:true});
+ else if(dirty(k!))out.push({name:'SUPABASE_PUBLISHABLE_KEY',problem:'tem aspas ou espaços; cole só a chave',required:true});
+ else if(/^sb_secret_/.test(k!))out.push({name:'SUPABASE_PUBLISHABLE_KEY',problem:'recebeu a chave secreta; aqui vai a chave publishable/anon',required:true});
  return out;
 }
 export function serverConfigIssues(env:Record<string,string|undefined>=process.env):ConfigIssue[]{
- const out=publicConfigIssues({NEXT_PUBLIC_SUPABASE_URL:env.NEXT_PUBLIC_SUPABASE_URL,NEXT_PUBLIC_SUPABASE_ANON_KEY:env.NEXT_PUBLIC_SUPABASE_ANON_KEY});
- const s=env.SUPABASE_SERVICE_ROLE_KEY,d=env.DATABASE_URL,a=env.AI_VAULT_KEY,m=env.APP_ADMIN_EMAIL;
- if(!has(s))out.push({name:'SUPABASE_SERVICE_ROLE_KEY',problem:'não cadastrada',required:true});else if(dirty(s!))out.push({name:'SUPABASE_SERVICE_ROLE_KEY',problem:'tem aspas ou espaços',required:true});else if(/^sb_publishable_/.test(s!)||s===env.NEXT_PUBLIC_SUPABASE_ANON_KEY)out.push({name:'SUPABASE_SERVICE_ROLE_KEY',problem:'recebeu a chave pública; aqui vai a secret/service_role',required:true});
+ const out=publicConfigIssues();
+ const s=env.SUPABASE_SERVICE_ROLE_KEY||env.SUPABASE_SECRET_KEY,d=env.DATABASE_URL,a=env.AI_VAULT_KEY,m=env.APP_ADMIN_EMAIL;
+ if(!has(s))out.push({name:'SUPABASE_SERVICE_ROLE_KEY',problem:'não cadastrada',required:true});else if(dirty(s!))out.push({name:'SUPABASE_SERVICE_ROLE_KEY',problem:'tem aspas ou espaços',required:true});else if(/^sb_publishable_/.test(s!)||s===process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)out.push({name:'SUPABASE_SERVICE_ROLE_KEY',problem:'recebeu a chave pública; aqui vai a secret/service_role',required:true});
  if(!has(d))out.push({name:'DATABASE_URL',problem:'não cadastrada',required:true});
  else if(dirty(d!))out.push({name:'DATABASE_URL',problem:'tem aspas ou espaços',required:true});
  else if(!/^postgres(ql)?:\/\//.test(d!))out.push({name:'DATABASE_URL',problem:'deve começar com postgresql://',required:true});

@@ -17,7 +17,7 @@ export type Files={put(key:string,bytes:ArrayBuffer):Promise<void>;uploadUrl(key
 const BUCKET='imports';
 function supabaseFiles():Files{
  let client:SupabaseClient|undefined;
- const store=async()=>(client??=(await import('@supabase/supabase-js')).createClient(env('NEXT_PUBLIC_SUPABASE_URL'),env('SUPABASE_SERVICE_ROLE_KEY'),{auth:{persistSession:false,autoRefreshToken:false}})).storage.from(BUCKET);
+ const store=async()=>(client??=(await import('@supabase/supabase-js')).createClient(process.env.NEXT_PUBLIC_SUPABASE_URL||env('SUPABASE_URL'),process.env.SUPABASE_SECRET_KEY||env('SUPABASE_SERVICE_ROLE_KEY'),{auth:{persistSession:false,autoRefreshToken:false}})).storage.from(BUCKET);
  const check=<T,>(r:{data:T|null;error:unknown}):T=>{if(r.error||r.data===null)throw new Error('Armazenamento de arquivos indisponível. Tente novamente.');return r.data};
  return {
   async put(key,bytes){check(await (await store()).upload(key,bytes,{contentType:'application/octet-stream',upsert:false}))},

@@ -6,17 +6,26 @@ let runner:Runner|undefined,files:Files|undefined;
 /** Tests inject PGlite and an in-memory store; production connects on first use. */
 export function useBackends(r:Runner,f:Files){runner=r;files=f}
 function env(name:string){const v=process.env[name];if(!v)throw new Error('Serviço indisponível: configuração do servidor incompleta.');return v}
+/** Host that actually answered (after the aws-0/aws-1 fallback), for /api/health. */
+export let connectedHost='';
+const QUERY_TIMEOUT=20000;
 function postgresRunner():Runner{
  let client:Promise<Sql>|undefined;
  // Supabase pooler (transaction mode) does not support prepared statements.
  const connect=async()=>{const postgres=(await import('postgres')).default,urls=poolerCandidates(env('DATABASE_URL'));
-  for(const [i,url] of urls.entries()){const sql=postgres(url,{prepare:false,max:3,idle_timeout:20,connect_timeout:10});
+  for(const [i,url] of urls.entries()){const sql=postgres(url,{prepare:false,max:1,idle_timeout:20,max_lifetime:300,connect_timeout:10});
    // Only the aws-0/aws-1 guess is retried; any other failure (password, network) surfaces as is.
-   try{if(urls.length>1)await sql`select 1`;return sql}catch(e){await sql.end({timeout:1}).catch(()=>{});if(i<urls.length-1&&tenantNotFound(String((e as Error).message)))continue;throw e}}
+   try{if(urls.length>1)await sql`select 1`;try{connectedHost=new URL(url).host}catch{};return sql}catch(e){await sql.end({timeout:1}).catch(()=>{});if(i<urls.length-1&&tenantNotFound(String((e as Error).message)))continue;throw e}}
   throw new Error('Banco indisponível.')};
  const get=()=>client??=connect().catch(e=>{client=undefined;throw e});
+ const reset=()=>{const old=client;client=undefined;old?.then(sql=>sql.end({timeout:1})).catch(()=>{})};
+ // One statement at a time per instance: concurrent queries on one connection are pipelined by postgres.js,
+ // which the transaction pooler does not handle (the dashboard's parallel reads hung). A stale socket left by a
+ // frozen serverless instance is dropped after QUERY_TIMEOUT instead of hanging the request.
+ let queue:Promise<unknown>=Promise.resolve();
+ const serial=<T,>(job:()=>Promise<T>,ms=QUERY_TIMEOUT)=>{const run=queue.then(()=>new Promise<T>((resolve,reject)=>{const timer=setTimeout(()=>{reset();reject(new Error('O banco demorou para responder. Tente novamente.'))},ms);job().then(resolve,reject).finally(()=>clearTimeout(timer))}));queue=run.catch(()=>{});return run};
  const args=(p:unknown[])=>p as ParameterOrJSON<never>[];
- return {query:async(text,params)=>[...await (await get()).unsafe(text,args(params))],transaction:async fn=>(await (await get()).begin(tx=>fn({query:async(text,params)=>[...await tx.unsafe(text,args(params))]}))) as Awaited<ReturnType<typeof fn>>};
+ return {query:(text,params)=>serial(async()=>[...await (await get()).unsafe(text,args(params))]),transaction:fn=>serial(async()=>(await (await get()).begin(tx=>fn({query:async(text,params)=>[...await tx.unsafe(text,args(params))]}))) as Awaited<ReturnType<typeof fn>>,50000)};
 }
 export function database():Database{runner??=postgresRunner();return wrap(runner)}
 export type Files={put(key:string,bytes:ArrayBuffer):Promise<void>;uploadUrl(key:string):Promise<string>;size(key:string):Promise<number|null>;remove(key:string):Promise<void>};

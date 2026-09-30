@@ -117,3 +117,10 @@ A primeira versão de produção roda em **Vercel + Supabase**, não mais em Sit
 - Testes de importação usam PGlite com as mesmas migrações. O driver de produção foi verificado contra PGlite via socket (parâmetros, JSON, rollback, `RETURNING`).
 
 Pendências desta etapa: provisionar o projeto Supabase e o projeto Vercel (exige as contas do usuário); primeira importação real em produção; e-mails de acesso usam o SMTP padrão do Supabase (limite baixo por hora; configurar SMTP próprio se necessário).
+
+## Estado do deploy — passagem para a próxima sessão
+
+- Produção: Vercel (projeto importado de `guiweber4/Mond`, branch `main`) + Supabase (projeto `ynffyfdduupwghjnvkba`, São Paulo). Migrações já executadas; login funcionando; chave pública cadastrada como `SUPABASE_PUBLISHABLE_KEY` (a Vercel bloqueia `NEXT_PUBLIC_` + `KEY`).
+- **Problema aberto:** importar planilha falha com `getaddrinfo ENOTFOUND db.ynffyfdduupwghjnvkba.supabase.co`. A `DATABASE_URL` ativa no deploy é a “Direct connection” (IPv6, inacessível pela Vercel). Precisa ser a “Transaction pooler”: `postgresql://postgres.ynffyfdduupwghjnvkba:<senha>@aws-?-sa-east-1.pooler.supabase.com:6543/postgres`, seguida de Redeploy. O usuário tentou editar e redeployar, sem efeito — verificar se há DATABASE_URL duplicada por ambiente, se o valor salvo ainda é o direto e se o deploy ativo é posterior à edição.
+- `/api/health` (PR #5) mostra o host do banco em uso, ambiente e commit do deploy.
+- Próximo passo com conectores Vercel/Supabase: ler `/api/health` e os logs do deploy, obter a string do pooler no Supabase, corrigir a variável e redeployar; depois importar as planilhas e conferir JK = 540 variações · 1.536 peças · R$ 1.291.617,77.

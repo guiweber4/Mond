@@ -1,10 +1,10 @@
 import {database,bucket,json} from '@/lib/db';
-import {serverConfigIssues,databaseHost} from '@/lib/config';
+import {serverConfigIssues,databaseHost,tenantNotFound} from '@/lib/config';
 export const dynamic='force-dynamic';
 /** Public diagnostics for setup: variable names and check results only, never values or raw errors. */
 function dbHint(e:unknown){const m=String((e as {message?:string})?.message||''),c=String((e as {code?:string})?.code||'');
  if(c==='28P01'||/password authentication failed/i.test(m))return 'senha do banco incorreta na DATABASE_URL';
- if(/Tenant or user not found/i.test(m))return 'pooler não reconhece o projeto: confira se o host usa a região do projeto (ex.: aws-1-us-east-1.pooler.supabase.com) e o usuário postgres.<id-do-projeto>';
+ if(tenantNotFound(m))return 'pooler não reconhece o projeto em aws-0 nem em aws-1 desta região: confira a região do projeto e o usuário postgres.<id-do-projeto>';
  if(c==='42P01'||/does not exist/i.test(m))return 'tabelas não encontradas: rode as migrações no SQL Editor';
  if(/ENOTFOUND|getaddrinfo/i.test(m))return /db\.[a-z0-9]+\.supabase\.co/.test(m)?'DATABASE_URL usa a “Direct connection”; troque pela “Transaction pooler” e faça Redeploy':'endereço do banco não encontrado: confira o host da DATABASE_URL';
  if(/timeout|ETIMEDOUT|ECONNREFUSED/i.test(m))return 'banco não respondeu: confira host e porta (6543)';

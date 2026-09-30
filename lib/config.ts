@@ -35,3 +35,15 @@ export function configPage(title:string,lead:string,issues:ConfigIssue[]){
 }
 /** Host only (no user/password) so the owner can confirm which database a deploy points to. */
 export function databaseHost(v=process.env.DATABASE_URL){try{const u=new URL((v||'').trim());return `${u.hostname}:${u.port||'5432'}`}catch{return v?'inválido':'não cadastrada'}}
+/**
+ * Shared-pooler URLs to try, in order. New projects live on aws-0 or aws-1 of their region and the dashboard
+ * does not always show which; both are tried, and a pooler user without the project ref gets it added.
+ */
+export function poolerCandidates(raw:string,supabaseUrl=process.env.NEXT_PUBLIC_SUPABASE_URL){
+ let u:URL;try{u=new URL(raw.trim())}catch{return [raw]}
+ const m=u.hostname.match(/^aws-([01])-(.+\.pooler\.supabase\.com)$/);if(!m)return [raw.trim()];
+ let ref=decodeURIComponent(u.username).split('.')[1]||'';if(!ref){try{ref=new URL(supabaseUrl||'').hostname.split('.')[0]}catch{}}
+ if(ref)u.username=`postgres.${ref}`;
+ const other=new URL(u.toString());other.hostname=`aws-${m[1]==='0'?'1':'0'}-${m[2]}`;
+ return [u.toString(),other.toString()];
+}

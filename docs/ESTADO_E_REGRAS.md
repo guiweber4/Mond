@@ -74,3 +74,27 @@ Totalizações: BC 212 variações / QT 497 / R$ 472.946,10; ECOMM 270 / 648 / R
 Estoque: JK 2.365 linhas → 2.362 variações / saldo 2.202; BC 804 → 804 / 2.044; ECOMM 2.111 → 2.106 / 1.723,2; RJ 1.771 → 1.767 / 2.476. Total: 7.051 linhas → 7.039 variações por unidade / saldo 8.445,2.
 
 São números das fixtures, não uma afirmação sobre a base de produção. O pacote não lê nem exporta essa base.
+
+## Continuação — sessão Claude Code (30/09/2026)
+
+Repositório: `guiweber4/Mond` (branch `claude/vibrant-tesla-iab06g`). Planilhas reais ficam fora do git, em `fixtures/` (ignorada).
+
+### Implementado
+
+- **Explorador categoria → modelo → grade → detalhe** (`app/catalog-explorer.tsx`, `lib/catalog.ts`), usado em Vendas consolidadas, Produtos e grade e Estoque. Categorias em cartões clicáveis + dropdown; modelo em dropdown dependente (com filtro quando há mais de 15); grade cor × tamanho com totais; clique na célula filtra o detalhe; filtro por unidade; paginação completa (sem truncar em 100/150).
+- **Identidade**: modelo = referência completa (homônimos separados). Tamanho canônico separa código de grade do rótulo (`01 - 32` → `32`, grade 01). Cor canônica (`3    - CHUMBO` e `3   -CHUMBO` → `3 - CHUMBO`), com valor bruto visível no detalhe. Ausente (—) ≠ zero.
+- **Categoria no estoque**: só por correspondência inequívoca da referência nas totalizações; caso contrário “Categoria não informada” ou “Conflito de categoria”. Nas fixtures: 199 de 398 referências.
+- **Produtos e grade** usa as totalizações quando existem; vendas transacionais são fonte alternativa explícita, nunca somadas.
+- **Mix de categorias clicável** em Vendas consolidadas abre o explorador na categoria.
+- **Estoque**: novo status “Saldo negativo” e “Sem histórico de vendas” (substitui “Sem venda observada” quando não há vendas transacionais para o SKU). Tabela paginada.
+- **Importador**: período sugerido = mês corrente até hoje (não mais setembro/2026 fixo), com aviso de que não vem do arquivo.
+- **Migração 0003** neutralizada para bancos novos; original em `docs/historico/`.
+- **UX**: Cormorant Garamond (títulos) + Inter (texto), contraste maior nos textos secundários, foco visível.
+- **Teste** `tests/catalog.test.mjs`: CALÇAS filtra só seus modelos, homônimos distintos, grade = detalhe = resumo, ausente ≠ zero, formato antigo, estoque 7.039 variações / 8.445,2.
+
+### Pendências conhecidas
+
+- Hospedagem nova (Cloudflare) ainda não configurada; autenticação atual confia nos cabeçalhos do Sites — precisa ser substituída fora do Sites.
+- Lint da base original tem ~80 erros pré-existentes (fora dos arquivos novos).
+- Cartão “Variantes em risco” no estoque conta saldos zerados mesmo sem histórico de vendas.
+- Relatórios ainda gerados dentro do fluxo de importação.

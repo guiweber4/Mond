@@ -8,7 +8,7 @@ Sistema de inteligência de varejo de moda para a Mondepars: vendas consolidadas
 
 | Camada | Onde | Arquivo |
 |---|---|---|
-| Páginas e API | Vercel (funções Node, região `gru1`) | `app/`, `app/api/*/route.ts` |
+| Páginas e API | Vercel (funções Node, região `iad1` (mesma do banco, us-east-1)) | `app/`, `app/api/*/route.ts` |
 | Banco | Supabase Postgres via pooler, transações reais | `lib/db.ts`, `lib/pg-adapter.ts`, `supabase/migrations/` |
 | Arquivos originais | Supabase Storage, bucket privado `imports` | `lib/db.ts` (`bucket()`), `app/api/import/upload` |
 | Login | Supabase Auth, validado no servidor a cada requisição | `lib/auth.ts`, `proxy.ts`, `app/login` |

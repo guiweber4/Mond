@@ -5,12 +5,12 @@ import os from 'node:os';
 import path from 'node:path';
 import ts from 'typescript';
 import {PGlite} from '@electric-sql/pglite';
-const libs=['presence-stock','model','imports','totals','catalog','report','operations','demo-operations','pg-adapter','config','db','findings','consolidated-report'];
+const libs=['presence-stock','model','imports','totals','catalog','report','operations','demo-operations','pg-adapter','config','db','findings','consolidated-report','metrics','identity','readiness','insights','analyst','access'];
 const transpile=src=>ts.transpileModule(src,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;
 export async function setup(name){
  const tmp=await fs.mkdtemp(path.join(os.tmpdir(),`mondepars-${name}-`));
  for(const lib of libs)await fs.writeFile(path.join(tmp,lib+'.mjs'),transpile(await fs.readFile(new URL(`../lib/${lib}.ts`,import.meta.url),'utf8')).replace(/from '(\.\/[^']+)'/g,"from '$1.mjs'"));
- await fs.writeFile(path.join(tmp,'auth.mjs'),"export const requireUser=async()=>({id:'test',email:'teste@mondepars.test',admin:true}),requireAdmin=requireUser;");
+ await fs.writeFile(path.join(tmp,'auth.mjs'),"export const requireUser=async()=>({id:'test',email:'teste@mondepars.test',admin:true,stores:null}),requireAdmin=requireUser;");
  await fs.writeFile(path.join(tmp,'route.mjs'),transpile(await fs.readFile(new URL('../app/api/import/route.ts',import.meta.url),'utf8')).replace(/from ['"]@\/lib\/([^'"]+)['"]/g,"from './$1.mjs'"));
  const pg=new PGlite();const dir=new URL('../supabase/migrations/',import.meta.url);
  for(const f of (await fs.readdir(dir)).filter(f=>f.endsWith('.sql')).sort())await pg.exec(await fs.readFile(new URL(f,dir),'utf8'));

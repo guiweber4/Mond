@@ -6,24 +6,28 @@ import {kindLabels,priorityLabels,type Finding,type FindingKind,type Priority} f
 import {searchKey} from '@/lib/catalog';
 import {dayBR} from '@/lib/model';
 const statusLabels:Record<string,string>={pending:'A avaliar',approved:'Aprovada',done:'Concluída',dismissed:'Descartada'};
-type Saved={status:string;owner?:string;due?:string;note?:string;updatedAt?:string};
+type Baseline={value:number|null;date:string;label:string};
+type Saved={status:string;owner?:string;due?:string;note?:string;updatedAt?:string;baseline?:Baseline;approvedAt?:string;executedAt?:string;changed?:boolean};
+const num=(v:number|null)=>v===null?'não consta':v.toLocaleString('pt-BR',{maximumFractionDigits:1});
 type Card=Finding&Saved;
 const PAGE=12;
-const groupOrder:FindingKind[]=['ruptura','realocar','reposicao','parado','negativo','dados'];
-const groupTitles:Record<FindingKind,string>={ruptura:'Transferir para cobrir falta',realocar:'Levar estoque parado para onde vende',reposicao:'Repor: sem saldo livre na rede',parado:'Estoque parado',negativo:'Saldo negativo para conferir',dados:'Qualidade dos dados'};
+const groupOrder:FindingKind[]=['ruptura','realocar','reposicao','desempenho','grade','ecommerce','mix','ranking','parado','compras','negativo','dados'];
+const groupTitles:Record<FindingKind,string>={ruptura:'Transferir para cobrir falta',realocar:'Levar estoque parado para onde vende',reposicao:'Repor: sem saldo livre na rede',parado:'Estoque parado',negativo:'Saldo negativo para conferir',dados:'Qualidade dos dados',desempenho:'Desempenho de vendas',mix:'Categorias e modelos',ranking:'Ranking e mudanças',grade:'Estoque e grade',ecommerce:'E-commerce',compras:'Compras'};
 const rank={alta:0,media:1,baixa:2};
 function groupsOf<T extends {kind:FindingKind}>(items:T[]){return groupOrder.map(k=>[k,items.filter(i=>i.kind===k)] as [FindingKind,T[]]).filter(([,i])=>i.length)}
 /** Findings as cards: what we saw → what to do. Approving records a decision; nothing runs in Presence. */
-export default function FindingsBoard({findings:all,saved,channel,onSave,kinds,eyebrow='ACHADOS E SUGESTÕES',title='O que olhar primeiro',description='Cruzamento das vendas consolidadas com o saldo de cada unidade. Cada card mostra a evidência e uma sugestão; aprovar registra a decisão, sem executar nada na Presence.'}:{findings:Finding[];saved:{dataset:string;status:string;payload:string;updated_at:string}[];channel:string;onSave:(a:Card,status:string)=>Promise<void>;kinds?:FindingKind[];eyebrow?:string;title?:string;description?:string}){
+export default function FindingsBoard({findings:all,saved,channel,onSave,kinds,observe,eyebrow='ACHADOS E SUGESTÕES',title='O que olhar primeiro',description='Cruzamento das vendas consolidadas com o saldo de cada unidade. Cada card mostra a evidência e uma sugestão; aprovar registra a decisão, sem executar nada na Presence.'}:{findings:Finding[];saved:{dataset:string;status:string;payload:string;updated_at:string}[];channel:string;onSave:(a:Card,status:string)=>Promise<void>;kinds?:FindingKind[];observe?:(store:string,reference:string)=>{value:number|null;date:string};eyebrow?:string;title?:string;description?:string}){
  const findings=kinds?all.filter(f=>kinds.includes(f.kind)):all;
  const titleId=useId();const [priority,setPriority]=useState<Priority|''>(''),[kind,setKind]=useState(''),[status,setStatus]=useState('open'),[query,setQuery]=useState(''),[limit,setLimit]=useState(PAGE),[edit,setEdit]=useState<Card|null>(null),[busy,setBusy]=useState('');
  const history=useMemo(()=>new Map(saved.filter(s=>s.dataset==='real').map(s=>{const p=JSON.parse(s.payload);return [p.id,{...p,status:s.status,updatedAt:s.updated_at}]})),[saved]);
- const cards:Card[]=findings.map(f=>{const h=history.get(f.id);return {...f,status:h?.status||'pending',owner:h?.owner,due:h?.due,note:h?.note,updatedAt:h?.updatedAt}}).filter(c=>channel==='all'||c.store==='all'||c.store===channel||c.from===channel||c.to===channel);
+ // A closed decision reopens when the numbers behind it changed (different fingerprint).
+ const cards:Card[]=findings.map(f=>{const h=history.get(f.id),changed=!!(h?.fingerprint&&f.fingerprint&&h.fingerprint!==f.fingerprint);const status=h?.status||'pending';return {...f,status:changed&&(status==='done'||status==='dismissed')?'pending':status,changed,owner:h?.owner,due:h?.due,note:h?.note,updatedAt:h?.updatedAt,baseline:h?.baseline,approvedAt:h?.approvedAt,executedAt:h?.executedAt}}).filter(c=>channel==='all'||c.store==='all'||c.store===channel||c.from===channel||c.to===channel);
  const openCards=cards.filter(c=>c.status==='pending'||c.status==='approved');
  const visible=cards.filter(c=>(status==='open'?c.status==='pending'||c.status==='approved':status==='all'||c.status===status)&&(!priority||c.priority===priority)&&(!kind||c.kind===kind)&&(!query.trim()||searchKey(`${c.title} ${c.evidence.join(' ')} ${c.storeName}`).includes(searchKey(query.trim()))));
  visible.sort((a,b)=>groupOrder.indexOf(a.kind)-groupOrder.indexOf(b.kind)||rank[a.priority]-rank[b.priority]);
  const count=(p:Priority)=>openCards.filter(c=>c.priority===p).length;
- async function save(c:Card,s:string){setBusy(c.id);try{await onSave(c,s)}finally{setBusy('')}}
+ // Approval stores the follow-up baseline; completion stores the execution date. Later readings show the observed evolution.
+ async function save(c:Card,s:string){setBusy(c.id);const now=new Date().toISOString();const extra:Partial<Saved>=s==='approved'&&!c.baseline&&c.follow?{baseline:{value:c.follow.value,date:c.follow.date,label:c.follow.label},approvedAt:now}:s==='done'&&!c.executedAt?{executedAt:now}:{};try{await onSave({...c,...extra,changed:undefined},s)}finally{setBusy('')}}
  const filtered=!!(priority||kind||query||status!=='open');
  return <section className="findings-board" aria-labelledby={titleId}>
   <div className="findings-head"><div><span className="eyebrow">{eyebrow}</span><h2 id={titleId}>{title}</h2><p>{description}</p></div></div>
@@ -35,7 +39,16 @@ export default function FindingsBoard({findings:all,saved,channel,onSave,kinds,e
    <h4>{c.title}</h4>{c.subtitle&&<p className="fcard-sub">{c.subtitle}</p>}
    {c.metrics&&c.metrics.length>0&&<dl className="fcard-metrics">{c.metrics.map((m,i)=><div key={i} className={m.tone||''}><dt>{m.label}</dt><dd>{m.value}</dd></div>)}</dl>}
    <div className="fcard-action"><Lightbulb size={16} aria-hidden="true"/><strong>{c.action||c.suggestion}</strong></div>
-   <details className="fcard-more"><summary>Ver detalhes</summary><ul>{c.evidence.map((e,i)=><li key={i}>{e}</li>)}</ul>{c.action&&<p>{c.suggestion}</p>}</details>
+   {c.changed&&<p className="fcard-changed">Os números mudaram desde a última decisão.</p>}
+   {c.baseline&&(c.status==='approved'||c.status==='done')&&(()=>{const now=observe&&c.follow?observe(c.follow.store,c.follow.reference):null;return <p className="fcard-follow"><b>Acompanhamento:</b> {c.baseline.label} {num(c.baseline.value)} em {dayBR(c.baseline.date)}{now&&now.date&&now.date!==c.baseline.date?<> → {num(now.value)} em {dayBR(now.date)}</>:' · aguardando nova posição'}. Evolução observada, não prova de efeito da ação.</p>})()}
+   <details className="fcard-more"><summary>Ver detalhes</summary>
+    {c.fact&&<p className="fcard-label"><b>Fato</b> {c.fact}</p>}
+    <ul>{c.evidence.map((e,i)=><li key={i}>{e}</li>)}</ul>
+    {c.hypotheses&&c.hypotheses.length>0&&<div className="fcard-block"><b>Hipóteses (não comprovadas)</b><ul>{c.hypotheses.map((h,i)=><li key={i}>{h.text}{h.support?` Apoio: ${h.support}`:''}{h.validateWith.length?` Validar com: ${h.validateWith.join(', ')}.`:''}</li>)}</ul></div>}
+    <p className="fcard-label"><b>Recomendação</b> {c.suggestion}</p>
+    {c.limitations&&c.limitations.length>0&&<div className="fcard-block"><b>Limitações</b><ul>{c.limitations.map((l,i)=><li key={i}>{l}</li>)}</ul></div>}
+    {c.scope&&<p className="fcard-scope">{[c.scope.period&&`Período ${c.scope.period}`,c.scope.compare&&`comparado a ${c.scope.compare}`,c.quality&&`qualidade dos dados: ${c.quality.level}`].filter(Boolean).join(' · ')}{c.priorityReasons?.length?` · Prioridade: ${c.priorityReasons.join('; ')}`:''}</p>}
+   </details>
    <footer><span className={'badge '+(c.status==='approved'?'ok':c.status==='done'?'planned':c.status==='dismissed'?'outdated':'risk')}>{statusLabels[c.status]}</span>{(c.owner||c.due)&&<small>{c.owner||'Sem responsável'}{c.due?` · até ${dayBR(c.due)}`:''}</small>}
     <div className="finding-actions">{c.status==='pending'&&<button type="button" className="btn primary sm" disabled={busy===c.id} onClick={()=>setEdit({...c,status:'approved'})}><Check size={15}/>Aprovar</button>}{c.status==='approved'&&<button type="button" className="btn primary sm" disabled={busy===c.id} onClick={()=>save(c,'done')}><CircleCheckBig size={15}/>Concluir</button>}{(c.status==='pending'||c.status==='approved')&&<button type="button" className="btn secondary sm" disabled={busy===c.id} onClick={()=>save(c,'dismissed')}>Descartar</button>}<button type="button" className="text-button" onClick={()=>setEdit({...c})}>Editar</button></div></footer>
   </article>)}</div></section>)}</div>}

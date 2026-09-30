@@ -1,7 +1,9 @@
 import {createServerClient} from '@supabase/ssr';
 import {cookies} from 'next/headers';
 import {checkOrigin} from './db';
-export type User={id:string;email:string;admin:boolean};
+import {storeAccess} from './access';
+/** `stores` null = every unit; otherwise the units this user may read (STORE_ACCESS). */
+export type User={id:string;email:string;admin:boolean;stores:string[]|null};
 export class AuthError extends Error{constructor(message='Sessão expirada. Entre novamente.'){super(message);this.name='AuthError'}}
 const list=(v?:string)=>(v||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
 /** Optional allowlist on top of Supabase Auth (signups should stay disabled in the project). */
@@ -9,8 +11,8 @@ export function allowedEmail(email:string){const allowed=list(process.env.ALLOWE
 export function adminEmail(email:string){const admin=(process.env.APP_ADMIN_EMAIL||'').trim().toLowerCase();return !!admin&&admin===email.toLowerCase()}
 export async function supabaseServer(){const store=await cookies();return createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,{cookies:{getAll:()=>store.getAll(),setAll:items=>{try{items.forEach(({name,value,options})=>store.set(name,value,options))}catch{/* Server Components cannot set cookies; the proxy refreshes them. */}}}})}
 /** Local development only (`next dev`): DEV_AUTH_EMAIL signs in without Supabase. Production builds never enable it. */
-export function devUser():User|null{const email=process.env.NODE_ENV==='development'?process.env.DEV_AUTH_EMAIL:undefined;return email?{id:'dev',email,admin:true}:null}
+export function devUser():User|null{const email=process.env.NODE_ENV==='development'?process.env.DEV_AUTH_EMAIL:undefined;return email?{id:'dev',email,admin:true,stores:null}:null}
 /** `getUser` validates the token with Supabase Auth; request headers are never trusted for identity. */
-export async function currentUser():Promise<User|null>{const dev=devUser();if(dev)return dev;const {data}=await (await supabaseServer()).auth.getUser();const u=data.user;if(!u?.email||!allowedEmail(u.email))return null;return {id:u.id,email:u.email,admin:adminEmail(u.email)}}
+export async function currentUser():Promise<User|null>{const dev=devUser();if(dev)return dev;const {data}=await (await supabaseServer()).auth.getUser();const u=data.user;if(!u?.email||!allowedEmail(u.email))return null;const admin=adminEmail(u.email);return {id:u.id,email:u.email,admin,stores:storeAccess(u.email,admin)}}
 export async function requireUser(req:Request){checkOrigin(req);const user=await currentUser();if(!user)throw new AuthError();return user}
 export async function requireAdmin(req:Request){const user=await requireUser(req);if(!user.admin)throw new AuthError('Disponível apenas para o administrador.');return user}

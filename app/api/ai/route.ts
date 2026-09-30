@@ -1,14 +1,16 @@
 import {validDate} from '@/lib/totals';
-import {database,json,readRecords} from '@/lib/db';
-import {aiEnv,requireAdmin,aiLimit,runProfile} from '@/lib/ai-server';
-import {sealKey,validateProfile,ProviderError,purposes,type Purpose} from '@/lib/ai-core';
+import {database,json,readRecords,dataVersion} from '@/lib/db';
+import {restrictData,reportAllowed} from '@/lib/access';
+import {verifyNumbers} from '@/lib/analyst';
+import {today} from '@/lib/model';
+import {aiEnv,requireAdmin,aiLimit,runProfile,routing,generate} from '@/lib/ai-server';
+import {sealKey,validateProfile,purposes,type Purpose} from '@/lib/ai-core';
 import {buildContext,parseSlides} from '@/lib/ai-context';
 import {requireUser} from '@/lib/auth';
 export const maxDuration=120;
 import {defaultStores,type Store} from '@/lib/model';
 import {defaultOps} from '@/lib/operations';
 import {demoOperationalData,demoOps} from '@/lib/demo-operations';
-async function routing(){const row=await database().prepare("SELECT payload FROM settings WHERE id='ai_routing'").first<{payload:string}>();return row?JSON.parse(row.payload):{primary:'',fallback:'',allowFallback:false}}
 export async function GET(req:Request){try{await requireAdmin(req);const [profiles,runs]=await Promise.all([database().prepare('SELECT id,name,provider,model,enabled,hint,updated_at FROM ai_profiles ORDER BY name').all(),database().prepare('SELECT * FROM ai_runs ORDER BY created_at DESC LIMIT 30').all()]);return json({profiles:profiles.results,runs:runs.results,routing:await routing(),vaultReady:!!aiEnv().AI_VAULT_KEY})}catch{return json({error:'Acesso de administrador necessário para configurar IA.'},403)}}
 export async function POST(req:Request){try{const peek=await req.clone().json().catch(()=>({})) as {action?:string};const user=['analyze','generate'].includes(String(peek.action))?await requireUser(req):await requireAdmin(req);if(Number(req.headers.get('content-length')||0)>12000)throw new Error('Solicitação muito extensa.');const raw=await req.text();if(raw.length>12000)throw new Error('Solicitação muito extensa.');let b=JSON.parse(raw);const db=database();
  if(b.action==='profile'){const p=validateProfile(b.profile),id=p.id||crypto.randomUUID();if(typeof id!=='string'||id.length>80)throw new Error('Conexão inválida.');const old=await db.prepare('SELECT provider,cipher,hint FROM ai_profiles WHERE id=?').bind(id).first<any>();const secret=typeof b.key==='string'?b.key.trim():'';if(secret&&(secret.length<12||secret.length>2000||/\s/.test(secret)))throw new Error('Chave inválida.');if(!secret&&(!old||old.provider!==p.provider))throw new Error('Informe uma chave para este provedor.');const master=aiEnv().AI_VAULT_KEY;if(!master)throw new Error('Cofre de chaves indisponível.');const cipher=secret?await sealKey(secret,master,id+':'+p.provider):old.cipher,hint=secret?'••••'+secret.slice(-4):old.hint;await db.prepare('INSERT INTO ai_profiles(id,name,provider,model,enabled,cipher,hint,updated_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,provider=excluded.provider,model=excluded.model,enabled=excluded.enabled,cipher=excluded.cipher,hint=excluded.hint,updated_at=excluded.updated_at').bind(id,p.name,p.provider,p.model,p.enabled?1:0,cipher,hint,new Date().toISOString()).run();return json({ok:true,id})}
@@ -17,18 +19,20 @@ export async function POST(req:Request){try{const peek=await req.clone().json().
  if(b.action==='test'){await aiLimit();return json(await runProfile(String(b.id),'',true,'test'))}
  if(b.action==='analyze')b={...b,action:'generate',purpose:'analysis',period:b.scope==='totals'?`${b.start}|${b.end}`:undefined};
  if(b.action!=='generate')throw new Error('Operação desconhecida.');
- const purpose=b.purpose as Purpose;if(!Object.hasOwn(purposes,purpose))throw new Error('Finalidade inválida.');
+ const purpose=b.purpose as Purpose;if(!Object.hasOwn(purposes,purpose)||purpose==='question')throw new Error('Finalidade inválida.');const allowed=user.stores;if(allowed&&b.channel!=='all'&&!allowed.includes(b.channel))throw new Error('Sem acesso a esta unidade.');
  if(!['real','demo'].includes(b.dataset)||!validDate(b.end)||!validDate(b.start)||b.start>b.end)throw new Error('Período inválido.');
  const route=await routing();if(!route.primary)throw new Error('Nenhuma conexão de IA configurada. Peça ao administrador para cadastrar a chave em Inteligência artificial.');
- const settings=await db.prepare("SELECT id,payload FROM settings WHERE id IN ('stores','operations')").all<{id:string;payload:string}>(),cfg=Object.fromEntries(settings.results.map(r=>[r.id,JSON.parse(r.payload)]));const stores:Store[]=cfg.stores||defaultStores;if(b.channel!=='all'&&!stores.some(s=>s.id===b.channel))throw new Error('Canal inválido.');
- let report:any=null;if(purpose==='report'){if(typeof b.reportId!=='string')throw new Error('Escolha um relatório salvo.');const row=await db.prepare('SELECT id,payload FROM reports WHERE id=?').bind(b.reportId).first<{id:string;payload:string}>();if(!row)throw new Error('Relatório não encontrado.');report=JSON.parse(row.payload)}
- const data=b.dataset==='demo'?demoOperationalData():await readRecords();const ops=b.dataset==='demo'?demoOps:cfg.operations||defaultOps,saved=(await db.prepare('SELECT dataset,status,payload FROM actions').all<{dataset:string;status:string;payload:string}>()).results;
- const context=buildContext({purpose,dataset:b.dataset,start:b.start,end:b.end,channel:b.channel,period:typeof b.period==='string'?b.period:undefined,report},data,stores,ops,saved);
+ const settings=await db.prepare("SELECT id,payload FROM settings WHERE id IN ('stores','operations','insights','reference_aliases','reference_types')").all<{id:string;payload:string}>(),cfg=Object.fromEntries(settings.results.map(r=>[r.id,JSON.parse(r.payload)]));const allStores:Store[]=cfg.stores||defaultStores,stores=allowed?allStores.filter(s=>allowed.includes(s.id)):allStores;if(b.channel!=='all'&&!stores.some(s=>s.id===b.channel))throw new Error('Canal inválido.');
+ let report:any=null;if(purpose==='report'){if(typeof b.reportId!=='string')throw new Error('Escolha um relatório salvo.');const row=await db.prepare('SELECT id,payload FROM reports WHERE id=?').bind(b.reportId).first<{id:string;payload:string}>();if(!row)throw new Error('Relatório não encontrado.');if(!reportAllowed(row.payload,allowed,new Map(allStores.map(s=>[s.id,s.name]))))throw new Error('Relatório não encontrado.');report=JSON.parse(row.payload)}
+ const data=restrictData(b.dataset==='demo'?demoOperationalData():await readRecords(),allowed);const ops=b.dataset==='demo'?demoOps:cfg.operations||defaultOps,saved=(await db.prepare('SELECT dataset,status,payload FROM actions').all<{dataset:string;status:string;payload:string}>()).results;
+ const context=buildContext({purpose,dataset:b.dataset,start:b.start,end:b.end,channel:b.channel,period:typeof b.period==='string'?b.period:undefined,report},data,stores,ops,saved,{today:today(),config:cfg.insights,tables:{aliases:cfg.reference_aliases,types:cfg.reference_types}});
  if(purpose!=='report'&&!data.sales.length&&!(data.totals||[]).length&&!data.stock.length)throw new Error('Importe vendas ou estoque antes de gerar com IA.');
- await aiLimit();let result:any;try{result={...await runProfile(route.primary,context,false,b.dataset,purpose),usedFallback:false}}catch(e){if(!(e instanceof ProviderError)||!e.retryable||!route.allowFallback||!route.fallback)throw e;result={...await runProfile(route.fallback,context,false,b.dataset,purpose),usedFallback:true}}
- const createdAt=new Date().toISOString(),ai={text:result.text,provider:result.provider,model:result.model,createdAt,by:user.email};
+ const result=await generate(context,b.dataset,purpose);
+ // Numbers the model wrote that are not in the context are flagged; dataVersion marks the reading outdated after new imports.
+ const unverified=verifyNumbers(result.text,context),version=b.dataset==='real'?await dataVersion():'demo';
+ const createdAt=new Date().toISOString(),ai={text:result.text,provider:result.provider,model:result.model,createdAt,by:user.email,unverified,dataVersion:version};
  // Persist where the team will look for it: inside the report, or as a new saved report.
- if(purpose==='report'){await db.prepare('UPDATE reports SET payload=? WHERE id=?').bind(JSON.stringify({...report,ai}),b.reportId).run();return json({...result,purpose,reportId:b.reportId})}
- if(purpose==='executive'){const slides=parseSlides(result.text);if(!slides.length)throw new Error('O modelo não devolveu os slides no formato esperado. Gere novamente.');const id=crypto.randomUUID(),title=`Apresentação executiva · ${new Date(createdAt).toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'})}`;await db.prepare('INSERT INTO reports(id,dataset,title,created_at,payload) VALUES(?,?,?,?,?)').bind(id,b.dataset,title,createdAt,JSON.stringify({kind:'executive',dataset:b.dataset,type:'Apresentação executiva',period:title,createdAt,slides,ai})).run();return json({...result,purpose,slides,reportId:id})}
- return json({...result,purpose});
+ if(purpose==='report'){await db.prepare('UPDATE reports SET payload=? WHERE id=?').bind(JSON.stringify({...report,ai}),b.reportId).run();return json({...result,unverified,dataVersion:version,purpose,reportId:b.reportId})}
+ if(purpose==='executive'){const slides=parseSlides(result.text);if(!slides.length)throw new Error('O modelo não devolveu os slides no formato esperado. Gere novamente.');const id=crypto.randomUUID(),title=`Apresentação executiva · ${new Date(createdAt).toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'})}`;await db.prepare('INSERT INTO reports(id,dataset,title,created_at,payload) VALUES(?,?,?,?,?)').bind(id,b.dataset,title,createdAt,JSON.stringify({kind:'executive',dataset:b.dataset,type:'Apresentação executiva',period:title,createdAt,slides,ai})).run();return json({...result,unverified,dataVersion:version,purpose,slides,reportId:id})}
+ return json({...result,unverified,dataVersion:version,purpose});
  }catch(e){return json({error:e instanceof Error?e.message:'Não foi possível concluir a solicitação.'},400)}}

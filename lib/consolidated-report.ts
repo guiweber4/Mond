@@ -1,18 +1,21 @@
 /** Consolidated sales report built for reading: headline numbers, units, categories, top models, stock and points of attention. */
 import {summarizeTotals,type Total} from './totals';
 import {dayBR,type Stock,type Store} from './model';
-import {computeFindings,latestStock,priorityLabels} from './findings';
+import {latestStock,priorityLabels} from './findings';
+import {computeInsights,snapshotOf,type InsightInput} from './insights';
 const pct=(part:number,total:number)=>total>0?Math.round(part/total*1000)/10:null;
 const brl=(n:number)=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
 const mi=(n:number)=>n>=1e6?`R$ ${(n/1e6).toLocaleString('pt-BR',{maximumFractionDigits:2})} mi`:n>=1e3?`R$ ${(n/1e3).toLocaleString('pt-BR',{maximumFractionDigits:0})} mil`:brl(n);
-export function consolidatedReport(totals:Total[],stores:Store[],start:string,end:string,channel='all',extra:{stock?:Stock[];today?:string}={}){
+export function consolidatedReport(totals:Total[],stores:Store[],start:string,end:string,channel='all',extra:{stock?:Stock[];today?:string}&Partial<Pick<InsightInput,'goals'|'saved'|'config'|'tables'>>={}){
  const a=summarizeTotals(totals,stores,start,end,channel),withFile=a.channels.filter(c=>c.hasData);
  const units=[...a.channels].sort((x,y)=>(y.hasData?y.amount:-1)-(x.hasData?x.amount:-1)).map(c=>({id:c.id,name:c.name,hasData:c.hasData,revenue:c.hasData?c.amount:null,units:c.hasData?c.qty:null,share:c.hasData?pct(c.amount,a.amount):null,references:c.hasData?c.references:null}));
  const categories=a.categories.slice(0,8).map(c=>({name:c.name||'Categoria não informada',amount:c.amount,share:pct(c.amount,a.amount)}));
  const models=a.products.slice(0,10).map(p=>({sku:p.reference,model:p.description,category:p.category,qty:p.qty,amount:p.amount,share:pct(p.amount,a.amount)}));
  const stockRows=latestStock(extra.stock||[]).filter(r=>channel==='all'||r.store===channel);
  const stock=[...new Set(stockRows.map(r=>r.store))].map(id=>{const rows=stockRows.filter(r=>r.store===id);return {name:stores.find(s=>s.id===id)?.name||id,date:rows[0].date,balance:Math.round(rows.reduce((s,r)=>s+r.physical,0)*10)/10,variants:rows.length,zero:rows.filter(r=>r.physical===0).length,negative:rows.filter(r=>r.physical<0).length}});
- const findings=extra.stock?computeFindings(totals,extra.stock,stores,{today:extra.today||end,period:`${start}|${end}`}).filter(f=>channel==='all'||f.store===channel||f.store==='all'||f.to===channel||f.from===channel):[];
+ const engine=computeInsights({totals,stock:extra.stock||[],stores,today:extra.today||end,period:`${start}|${end}`,goals:extra.goals,saved:extra.saved,config:extra.config,tables:extra.tables}),inChannel=(f:{store:string;to?:string;from?:string})=>channel==='all'||f.store===channel||f.store==='all'||f.to===channel||f.from===channel;
+ // Stock-dependent points only when a stock base was given (as before); analytic insights always.
+ const findings=engine.insights.filter(f=>inChannel(f)&&(extra.stock||['desempenho','mix','ranking'].includes(f.kind)));
  const lead=withFile[0]?units[0]:null,cat=categories[0],top=models[0];
  // Plain sentences a store manager can read in 30 seconds.
  const summary=[
@@ -26,6 +29,7 @@ export function consolidatedReport(totals:Total[],stores:Store[],start:string,en
  return {kind:'totals',version:2,dataset:'real',type:'Consolidado',period:`${dayBR(start)} a ${dayBR(end)}`,start,end,channel:channel==='all'?'Todas as unidades':stores.find(s=>s.id===channel)?.name,createdAt:new Date().toISOString(),
   revenue:a.amount,units:a.units,ticket:null,average:a.units>0?Math.round(a.amount/a.units*100)/100:null,summary,insights:summary,
   channels:units.map(u=>({...u,revenue:u.revenue,units:u.units})),categories,products:models,stock,
-  attention:findings.slice(0,6).map(f=>({priority:priorityLabels[f.priority],title:f.title,suggestion:f.suggestion})),
+  attention:findings.slice(0,6).map(f=>({priority:priorityLabels[f.priority],title:f.title,fact:f.fact,suggestion:f.action?`${f.action}.`:f.suggestion,hypotheses:(f.hypotheses||[]).slice(0,2).map(h=>h.text)})),
+  limitations:engine.readiness.limitations,insightSnapshot:snapshotOf(engine.insights.filter(inChannel)),
   notes:['Valores do arquivo de totalização da Presence, com sinais originais (devoluções e ajustes incluídos).','Preço médio por peça = valor ÷ peças líquidas. Ticket por pedido e evolução diária não existem neste arquivo.','Estoque = Saldo Base na data da posição, sem reservas nem trânsito.','Pontos de atenção são sugestões para validar; nada é executado automaticamente.'],actions:[]};
 }

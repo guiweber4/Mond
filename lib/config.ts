@@ -47,3 +47,5 @@ export function poolerCandidates(raw:string,supabaseUrl=process.env.NEXT_PUBLIC_
  const other=new URL(u.toString());other.hostname=`aws-${m[1]==='0'?'1':'0'}-${m[2]}`;
  return [u.toString(),other.toString()];
 }
+/** Supavisor answers either "Tenant or user not found" or "(ENOTFOUND) tenant/user postgres.<ref> not found". */
+export const tenantNotFound=(message:string)=>/tenant(\/| or )user\b.*not found/i.test(message);

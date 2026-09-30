@@ -7,6 +7,8 @@ const page=(html:string)=>new NextResponse(html,{status:503,headers:{'content-ty
 export async function proxy(request:NextRequest){
  const path=request.nextUrl.pathname;
  if(path==='/api/health')return NextResponse.next();
+ // Local development without Supabase Auth (see lib/auth.ts devUser); never active in production builds.
+ if(process.env.NODE_ENV==='development'&&process.env.DEV_AUTH_EMAIL)return NextResponse.next();
  // A missing/invalid public variable used to crash here as a bare "Internal Server Error".
  const issues=publicConfigIssues();
  if(issues.length)return path.startsWith('/api/')?NextResponse.json({error:'Configuração do servidor incompleta.',issues:issues.map(i=>i.name)},{status:503}):page(configPage('Configuração incompleta','O sistema não encontrou a configuração do Supabase neste deploy:',issues));
@@ -19,4 +21,4 @@ export async function proxy(request:NextRequest){
  if(!user&&!path.startsWith('/api/')&&!PUBLIC.some(p=>path===p||path.startsWith(p+'/'))){const url=request.nextUrl.clone();url.pathname='/login';url.search=path==='/'?'':`?next=${encodeURIComponent(path)}`;return NextResponse.redirect(url)}
  return response;
 }
-export const config={matcher:['/((?!_next/static|_next/image|favicon.svg|.*\\.(?:svg|png|jpg|jpeg|webp|ico)$).*)']};
+export const config={matcher:['/((?!_next/|favicon.svg|.*\\.(?:svg|png|jpg|jpeg|webp|ico)$).*)']};

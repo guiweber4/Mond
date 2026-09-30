@@ -2,7 +2,10 @@ import {database,bucket,json,fail,readRecords} from '@/lib/db';
 import {requireUser} from '@/lib/auth';
 import {validateNormalized,type Kind} from '@/lib/imports';
 import {defaultStores} from '@/lib/model';
-import {totalScope,totalsReport} from '@/lib/totals';
+import {totalScope} from '@/lib/totals';
+import {consolidatedReport} from '@/lib/consolidated-report';
+import {latestPeriod} from '@/lib/findings';
+import {today} from '@/lib/model';
 import {reportSnapshot} from '@/lib/report';
 export const maxDuration=60;
 const MAX_FILE=8000000,KEY=/^imports\/([0-9a-f-]{36})\/original$/;
@@ -33,7 +36,11 @@ statements.push(db.prepare("UPDATE imports SET status='ready' WHERE id=?").bind(
 if(kind==='totals')statements.push(db.prepare('INSERT INTO total_batches(scope,store,start,"end",import_id) VALUES(?,?,?,?,?) ON CONFLICT(scope) DO UPDATE SET import_id=excluded.import_id').bind(totalScope(rows[0]),rows[0].store,rows[0].start,rows[0].end,id));
 if(kind==='stock'){const scopes=new Map(rows.map(r=>[JSON.stringify([r.store,r.date]),r]));for(const r of scopes.values())statements.push(db.prepare('INSERT INTO stock_batches(store,date,import_id) VALUES(?,?,?) ON CONFLICT(store,date) DO UPDATE SET import_id=excluded.import_id').bind(r.store,r.date,id));}
 await db.batch(statements);
-let reportWarning='';try{const data=await readRecords();const operation=await db.prepare("SELECT payload FROM settings WHERE id='operations'").first<{payload:string}>(),saved=await db.prepare('SELECT dataset,status,payload FROM actions').all();if(kind==='totals'){const report=totalsReport(data.totals,stores,rows[0].start,rows[0].end);await db.prepare('INSERT INTO reports(id,dataset,title,created_at,payload) VALUES(?,?,?,?,?)').bind(id+':consolidated','real',`Consolidado · ${report.period} · Automático`,new Date().toISOString(),JSON.stringify(report)).run();}else if(data.sales.length){const finish=data.sales.reduce((a:string,s:any)=>s.date.slice(0,10)>a?s.date.slice(0,10):a,'');for(const type of ['Diário','Semanal','Mensal']){const report=reportSnapshot(data,stores,finish,type,'real','all',operation?JSON.parse(operation.payload):undefined,saved.results);await db.prepare('INSERT INTO reports(id,dataset,title,created_at,payload) VALUES(?,?,?,?,?)').bind(id+':'+type,'real',`${type} · ${report.period} · Automático`,new Date().toISOString(),JSON.stringify(report)).run();}}}catch(e){console.error('Relatórios automáticos',e);reportWarning='Importação concluída. Gere o relatório manualmente na central.';}
+let reportWarning='';try{const data=await readRecords();const operation=await db.prepare("SELECT payload FROM settings WHERE id='operations'").first<{payload:string}>(),saved=await db.prepare('SELECT dataset,status,payload FROM actions').all();if(kind==='totals'||(kind==='stock'&&data.totals.length)){
+ // One automatic consolidated report per period, refreshed by every sales or stock import instead of duplicated.
+ const [start,end]=kind==='totals'?[rows[0].start,rows[0].end]:latestPeriod(data.totals).split('|');const report=consolidatedReport(data.totals,stores,start,end,'all',{stock:data.stock,today:today()});
+ await db.prepare('INSERT INTO reports(id,dataset,title,created_at,payload) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title,created_at=excluded.created_at,payload=excluded.payload').bind(`auto:totals:${start}:${end}`,'real',`Consolidado · ${report.period} · Automático`,new Date().toISOString(),JSON.stringify(report)).run();}
+if(kind!=='totals'&&data.sales.length){const finish=data.sales.reduce((a:string,s:any)=>s.date.slice(0,10)>a?s.date.slice(0,10):a,'');for(const type of ['Diário','Semanal','Mensal']){const report=reportSnapshot(data,stores,finish,type,'real','all',operation?JSON.parse(operation.payload):undefined,saved.results);await db.prepare('INSERT INTO reports(id,dataset,title,created_at,payload) VALUES(?,?,?,?,?)').bind(id+':'+type,'real',`${type} · ${report.period} · Automático`,new Date().toISOString(),JSON.stringify(report)).run();}}}catch(e){console.error('Relatórios automáticos',e);reportWarning='Importação concluída. Gere o relatório manualmente na central.';}
 return json({ok:true,count:rows.length,id,kind,stockDate:kind==='stock'?rows.reduce((a,r)=>r.date>a?r.date:a,''):null,period:kind==='totals'?{start:rows[0].start,end:rows[0].end}:null,reportWarning});}
 // The batch is a single transaction: on failure nothing was written, so there is no partial snapshot to mark.
 catch(e){return fail(e)}}

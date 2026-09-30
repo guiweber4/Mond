@@ -1,0 +1,8 @@
+// Local audit environment: PGlite with the Supabase migrations, seeded through the real import route, served over TCP.
+import fs from 'node:fs/promises';import path from 'node:path';import XLSX from 'xlsx';import {setup} from '../tests/harness.mjs';import {PGLiteSocketServer} from '@electric-sql/pglite-socket';
+const h=await setup('dev');const {defaultStores}=await h.load('model'),{normalizeRows,guessMapping,norm}=await h.load('imports'),{presenceStockFields}=await h.load('presence-stock'),{POST}=await h.load('route');
+const storeOf=f=>/JK/.test(f)?'02':/ECOMM/.test(f)?'03':/RJ/.test(f)?'05':'BC';
+for(const f of (await fs.readdir('fixtures')).sort().reverse()){if(/RJ/.test(f))continue;const bytes=await fs.readFile('fixtures/'+f),wb=XLSX.read(bytes),raw=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''}),hs=Object.keys(raw[0]),stock=f.startsWith('SALDO');
+ const v=normalizeRows(raw,stock?Object.fromEntries(presenceStockFields.map(x=>[x.key,hs.find(k=>x.aliases.includes(norm(k)))||''])):guessMapping(hs,'totals'),stock?'stock':'totals',defaultStores,stock?{store:storeOf(f),start:'2026-09-30',end:'2026-09-30',date:'2026-09-30'}:{store:storeOf(f),start:'2026-09-01',end:'2026-09-30'});
+ const r=await POST(new Request('https://x/api/import',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({kind:stock?'stock':'totals',rows:v.rows,fileName:f,fileBase64:bytes.toString('base64')})}));console.log(f,r.status)}
+const server=new PGLiteSocketServer({db:h.pg,port:55440,host:'127.0.0.1'});await server.start();console.log('READY postgres://postgres:postgres@127.0.0.1:55440/postgres');

@@ -4,6 +4,7 @@ import {inventory,aggregate,type Data,type Store} from './model';
 import {anticipate,type OpsConfig} from './operations';
 import {categoryIndex,resolveCategory,canonColor,canonSize,NO_CATEGORY} from './catalog';
 import type {Purpose} from './ai-core';
+import {computeFindings,kindLabels,priorityLabels} from './findings';
 const r2=(n:number)=>Math.round(n*100)/100,r6=(n:number)=>Math.round(n*1e6)/1e6;
 /** Most recent declared totals period, or the one requested. */
 export function pickPeriod(totals:Total[],wanted?:string){const periods=[...new Set(totals.map(t=>`${t.start}|${t.end}`))].sort((a,b)=>a.split('|')[1].localeCompare(b.split('|')[1])||a.localeCompare(b));return wanted&&periods.includes(wanted)?wanted:periods.at(-1)||''}
@@ -52,7 +53,8 @@ export function buildContext(p:AIParams,data:Data,stores:Store[],ops:OpsConfig,s
    decisoes:plan.decisions.filter(d=>p.channel==='all'||d.to===p.channel||d.from===p.channel).slice(0,12),pedidosAtrasados:plan.overdue.length,
    qualidade:plan.quality.map(q=>({unidade:q.name,status:q.status,estoque:q.lastStock,controlesFaltantes:q.gaps.length,divergencias:q.mismatches.length,semCadastro:q.unknown}))}}
  const acoes=saved.filter(s=>s.dataset===p.dataset).reduce<Record<string,number>>((acc,s)=>{acc[s.status]=(acc[s.status]||0)+1;return acc},{});
- const ctx:Record<string,unknown>={...base,vendasConsolidadas:vendas,estoque,sinaisVendasEstoque:sinais,operacional};
+ const achados=computeFindings(totals,data.stock,stores,{today:new Date().toISOString().slice(0,10),period}).filter(f=>p.channel==='all'||f.store==='all'||f.store===p.channel||f.from===p.channel||f.to===p.channel).slice(0,25).map(f=>({prioridade:priorityLabels[f.priority],tipo:kindLabels[f.kind],unidade:f.storeName,titulo:f.title,evidencias:f.evidence.slice(0,3),sugestaoCalculada:f.suggestion}));
+ const ctx:Record<string,unknown>={...base,achadosCalculados:achados,vendasConsolidadas:vendas,estoque,sinaisVendasEstoque:sinais,operacional};
  if(p.purpose==='planning')ctx.parametrosAbastecimento={prazoFornecimentoDias:ops.leadDays,segurancaDias:ops.safetyDays,coberturaAlvoDias:ops.targetDays,rotas:(ops.routes||[]).length};
  if(p.purpose==='actions')ctx.acoesRegistradas=acoes;
  return JSON.stringify({...ctx,limitacoes:limitations});

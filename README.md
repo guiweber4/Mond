@@ -35,6 +35,7 @@ As planilhas reais da Presence **não são versionadas** (contêm dados comercia
 ```sh
 node tests/detailed-import.test.mjs fixtures
 node tests/stock-import.test.mjs fixtures
+node tests/catalog.test.mjs fixtures
 ```
 
 Conciliação esperada: vendas 1.022 linhas / QT 2.681 / R$ 2.268.565,55; estoque 7.051 linhas → 7.039 variações por unidade / saldo 8.445,2.

@@ -98,3 +98,22 @@ Repositório: `guiweber4/Mond` (branch `claude/vibrant-tesla-iab06g`). Planilhas
 - Lint da base original tem ~80 erros pré-existentes (fora dos arquivos novos).
 - Cartão “Variantes em risco” no estoque conta saldos zerados mesmo sem histórico de vendas.
 - Relatórios ainda gerados dentro do fluxo de importação.
+
+## Migração para Vercel + Supabase (30/09/2026)
+
+A primeira versão de produção roda em **Vercel + Supabase**, não mais em Sites/Cloudflare.
+
+| Antes | Agora |
+|---|---|
+| Vinext/Vite + Cloudflare Worker | Next.js 16 (App Router) na Vercel, região `gru1` |
+| D1 (SQLite) + Drizzle | Supabase Postgres via `postgres.js` (pooler, `prepare:false`); schema em `supabase/migrations/` |
+| R2 | Supabase Storage, bucket privado `imports` (arquivo enviado por URL assinada) |
+| Cabeçalhos de identidade do Sites | Supabase Auth (`getUser()` no servidor), `proxy.ts` para páginas, 401 nas APIs |
+
+- `lib/pg-adapter.ts` mantém a interface `prepare/bind/first/all/run/batch`; `batch` é uma transação Postgres. SQL específico de SQLite foi reescrito (`json_each` → `json_array_elements`, `json_extract` → colunas geradas `pos_store`/`pos_date`, `"end"` entre aspas).
+- A Vercel limita o corpo das requisições a 4,5 MB, então o arquivo original sobe direto ao Storage e a rota recebe só as linhas (até 8.000). A rota confere que o arquivo existe e tem até 8 MB.
+- A migração inicial já nasce sem o reset histórico; o gatilho `data_reset`/`__reset_files` não existe mais.
+- Acesso: contas criadas no Supabase (cadastro público desativado), `ALLOWED_EMAILS` opcional, `APP_ADMIN_EMAIL` para IA.
+- Testes de importação usam PGlite com as mesmas migrações. O driver de produção foi verificado contra PGlite via socket (parâmetros, JSON, rollback, `RETURNING`).
+
+Pendências desta etapa: provisionar o projeto Supabase e o projeto Vercel (exige as contas do usuário); primeira importação real em produção; e-mails de acesso usam o SMTP padrão do Supabase (limite baixo por hora; configurar SMTP próprio se necessário).

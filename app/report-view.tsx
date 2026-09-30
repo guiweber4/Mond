@@ -1,0 +1,32 @@
+'use client';
+import {Lightbulb} from 'lucide-react';
+import {SlideDeck,Markdown} from './ai-assist';
+/* eslint-disable @typescript-eslint/no-explicit-any -- saved report payloads come in several historical shapes */
+const brl=(n:number)=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
+const brlc=(n:number)=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const int=(n:number)=>n.toLocaleString('pt-BR',{maximumFractionDigits:1});
+const pc=(n:number|null|undefined)=>n==null?'—':`${n.toLocaleString('pt-BR',{maximumFractionDigits:1})}%`;
+const when=(s:string)=>new Date(s).toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo',dateStyle:'short',timeStyle:'short'});
+function Bar({value,max}:{value:number;max:number}){return <span className="rv-bar" aria-hidden="true"><i style={{width:`${max>0?Math.max(2,Math.min(100,value/max*100)):0}%`}}/></span>}
+function AIBlock({ai}:{ai:any}){if(!ai)return null;return <section className="rv-section"><h2>Leitura da IA</h2><Markdown text={ai.text}/><p className="rv-meta">{ai.provider} · {ai.model} · {when(ai.createdAt)}. Consultiva; revise antes de decidir.</p></section>}
+/** Printable report. Reads current (v2) and historical payloads. */
+export default function ReportView({report}:{report:any}){
+ if(!report)return null;
+ const head=(eyebrow:string,title:string)=><header className="rv-head"><div className="report-brand">MONDEPARS <span>INTELLIGENCE</span></div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p className="rv-sub">{report.period}{report.channel?` · ${report.channel}`:''}</p></header>;
+ if(report.kind==='executive')return <article className="report-preview">{head('APRESENTAÇÃO EXECUTIVA · GERADA COM IA','Apresentação executiva')}<SlideDeck slides={report.slides||[]}/><footer>{report.ai?.provider} · {report.ai?.model}. Leitura consultiva baseada nos números calculados pelo sistema; revise antes de apresentar.</footer></article>;
+ const totals=report.kind==='totals',money=totals?brl:brlc,channels:any[]=(report.channels||[]).filter((c:any)=>c.revenue!==undefined),maxCh=Math.max(0,...channels.map((c:any)=>c.revenue||0));
+ const summary:string[]=report.summary||report.insights||[],products:any[]=(report.products||[]).slice(0,10),cats:any[]=report.categories||[],maxCat=Math.max(0,...cats.map((c:any)=>c.amount));
+ return <article className="report-preview">
+  {head(`${report.dataset==='demo'?'DADOS DE DEMONSTRAÇÃO':'DADOS IMPORTADOS'} · ${report.type}`,totals?'Relatório de vendas consolidadas':'Relatório de performance')}
+  <div className="rv-kpis"><div><span>{totals?'Vendas no período':'Receita líquida'}</span><strong>{money(report.revenue)}</strong></div><div><span>Peças líquidas</span><strong>{int(report.units)}</strong></div><div><span>{totals?'Preço médio por peça':'Ticket médio'}</span><strong>{totals?(report.average==null?'—':brlc(report.average)):brlc(report.ticket||0)}</strong></div></div>
+  <section className="rv-section rv-summary"><h2>Em resumo</h2><ul>{summary.map((s,i)=><li key={i}>{s}</li>)}</ul></section>
+  {channels.length>0&&<section className="rv-section"><h2>Por unidade</h2><table className="rv-table"><thead><tr><th>Unidade</th><th className="num">{totals?'Vendas':'Receita'}</th><th className="num">Peças</th><th className="num">Participação</th><th aria-hidden="true"></th></tr></thead><tbody>{channels.map((c:any)=><tr key={c.id||c.name}><td>{c.name}</td><td className="num">{c.revenue==null?<em>sem arquivo</em>:money(c.revenue)}</td><td className="num">{c.units==null?'—':int(c.units)}</td><td className="num">{c.revenue==null?'—':pc(c.share??(report.revenue?c.revenue/report.revenue*100:null))}</td><td className="bar-cell">{c.revenue!=null&&<Bar value={c.revenue} max={maxCh}/>}</td></tr>)}</tbody></table></section>}
+  {cats.length>0&&<section className="rv-section"><h2>Categorias que mais vendem</h2><div className="rv-bars">{cats.map((c:any)=><div key={c.name}><span>{c.name}</span><Bar value={c.amount} max={maxCat}/><strong>{money(c.amount)} · {pc(c.share)}</strong></div>)}</div></section>}
+  {products.length>0&&<section className="rv-section"><h2>{totals?'Modelos em destaque':'Produtos em destaque'}</h2><table className="rv-table"><thead><tr><th>#</th><th>Modelo</th><th>Categoria</th><th className="num">Peças</th><th className="num">{totals?'Vendas':'Receita'}</th></tr></thead><tbody>{products.map((p:any,i:number)=><tr key={(p.sku||'')+i}><td>{i+1}</td><td><strong>{p.model||p.description}</strong><small>{p.sku||p.reference}{p.color&&!totals?` · ${p.color} · ${p.size}`:''}</small></td><td>{p.category}</td><td className="num">{int(p.qty)}</td><td className="num">{money(p.amount)}</td></tr>)}</tbody></table></section>}
+  {report.stock?.length>0&&<section className="rv-section"><h2>Estoque na data da posição</h2><table className="rv-table"><thead><tr><th>Unidade</th><th>Data</th><th className="num">Saldo informado</th><th className="num">Variações</th><th className="num">Zeradas</th><th className="num">Negativas</th></tr></thead><tbody>{report.stock.map((s:any)=><tr key={s.name}><td>{s.name}</td><td>{s.date.split('-').reverse().join('/')}</td><td className="num">{int(s.balance)}</td><td className="num">{int(s.variants)}</td><td className="num">{int(s.zero)}</td><td className={'num'+(s.negative?' neg':'')}>{int(s.negative)}</td></tr>)}</tbody></table></section>}
+  {report.attention?.length>0&&<section className="rv-section"><h2>Pontos de atenção</h2><div className="rv-attention">{report.attention.map((a:any,i:number)=><div key={i} className={'rv-att '+String(a.priority).toLowerCase().replace('é','e')}><span className="priority-pill">{a.priority}</span><strong>{a.title}</strong><p><Lightbulb size={14} aria-hidden="true"/> {a.suggestion}</p></div>)}</div><p className="rv-meta">Lista completa, com status e responsável, em Plano de ação.</p></section>}
+  {!totals&&report.actions?.length>0&&<section className="rv-section"><h2>Próximas ações</h2><ul>{report.actions.slice(0,5).map((a:any)=><li key={a.id}><strong>{a.title}.</strong> {a.detail}</li>)}</ul></section>}
+  <AIBlock ai={report.ai}/>
+  <footer><strong>Como ler este relatório.</strong> {(report.notes||[totals?'Valores do arquivo totalizado, com sinais originais. Preço médio por peça = valor ÷ peças líquidas. Ticket e dados diários indisponíveis.':'Receita de itens após descontos, deduzidas devoluções, sem frete. Ticket = valor de vendas ÷ pedidos com venda.']).join(' ')} Gerado em {when(report.createdAt)}.</footer>
+ </article>
+}

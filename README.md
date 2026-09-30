@@ -43,4 +43,4 @@ Conciliação esperada: vendas 1.022 linhas / QT 2.681 / R$ 2.268.565,55; estoqu
 ## Segurança
 
 - Nenhum segredo no repositório. Variáveis de servidor em `.env.example` (`AI_VAULT_KEY`, `APP_ADMIN_EMAIL`).
-- Nunca executar `drizzle/0003_real_world_reset.sql` em banco preenchido — é uma limpeza histórica, não um bootstrap.
+- `drizzle/0003_real_world_reset.sql` é um no-op neste projeto. A limpeza histórica original está em `docs/historico/` e nunca deve ser executada em banco preenchido.

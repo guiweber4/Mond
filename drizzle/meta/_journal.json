@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1790458330832,
+      "tag": "0000_blushing_switch",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1790521553300,
+      "tag": "0001_typical_lenny_balinger",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790711054333,
+      "tag": "0002_lively_moondragon",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790711701000,
+      "tag": "0003_real_world_reset",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1790729332641,
+      "tag": "0004_colorful_mysterio",
+      "breakpoints": true
+    }
+  ]
+}

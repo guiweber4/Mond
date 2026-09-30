@@ -1,0 +1,13 @@
+import { sqliteTable, text, integer, index, primaryKey } from 'drizzle-orm/sqlite-core';
+export const imports = sqliteTable('imports', {id:text('id').primaryKey(),name:text('name').notNull(),kind:text('kind').notNull(),createdAt:text('created_at').notNull(),status:text('status').notNull(),count:integer('count').notNull(),hash:text('hash').notNull(),fileKey:text('file_key').notNull()},t=>[index('idx_imports_status').on(t.status)]);
+export const records = sqliteTable('records',{kind:text('kind').notNull(),rid:text('rid').notNull(),importId:text('import_id').notNull().references(()=>imports.id),payload:text('payload').notNull()},t=>[primaryKey({columns:[t.kind,t.rid,t.importId]}),index('idx_records_import').on(t.importId)]);
+export const settings = sqliteTable('settings',{id:text('id').primaryKey(),payload:text('payload').notNull()});
+export const actions = sqliteTable('actions',{id:text('id').primaryKey(),dataset:text('dataset').notNull(),status:text('status').notNull(),updatedAt:text('updated_at').notNull(),payload:text('payload').notNull()});
+export const reports = sqliteTable('reports',{id:text('id').primaryKey(),dataset:text('dataset').notNull(),title:text('title').notNull(),createdAt:text('created_at').notNull(),payload:text('payload').notNull()});
+export const aiProfiles=sqliteTable('ai_profiles',{id:text('id').primaryKey(),name:text('name').notNull(),provider:text('provider').notNull(),model:text('model').notNull(),enabled:integer('enabled').notNull(),cipher:text('cipher').notNull(),hint:text('hint').notNull(),updatedAt:text('updated_at').notNull()});
+export const aiRuns=sqliteTable('ai_runs',{id:text('id').primaryKey(),profileId:text('profile_id').notNull(),provider:text('provider').notNull(),model:text('model').notNull(),dataset:text('dataset').notNull(),purpose:text('purpose').notNull(),createdAt:text('created_at').notNull(),status:text('status').notNull(),durationMs:integer('duration_ms').notNull(),inputTokens:integer('input_tokens'),outputTokens:integer('output_tokens'),output:text('output').notNull()},t=>[index('idx_ai_runs_created').on(t.createdAt)]);
+export const aiQuota=sqliteTable('ai_quota',{id:text('id').primaryKey(),count:integer('count').notNull()});
+
+export const totalBatches=sqliteTable('total_batches',{scope:text('scope').primaryKey(),store:text('store').notNull(),start:text('start').notNull(),end:text('end').notNull(),importId:text('import_id').notNull().references(()=>imports.id)});
+
+export const stockBatches=sqliteTable('stock_batches',{store:text('store').notNull(),date:text('date').notNull(),importId:text('import_id').notNull().references(()=>imports.id)},t=>[primaryKey({columns:[t.store,t.date]})]);

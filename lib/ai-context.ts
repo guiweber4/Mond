@@ -4,7 +4,10 @@ import {inventory,aggregate,type Data,type Store} from './model';
 import {anticipate,type OpsConfig} from './operations';
 import {categoryIndex,resolveCategory,canonColor,canonSize,NO_CATEGORY} from './catalog';
 import type {Purpose} from './ai-core';
-import {computeFindings,kindLabels,priorityLabels} from './findings';
+import {kindLabels,priorityLabels,type Finding} from './findings';
+import {computeInsights,type InsightConfig} from './insights';
+import {metricBrief} from './metrics';
+import type {IdentityTables} from './identity';
 const r2=(n:number)=>Math.round(n*100)/100,r6=(n:number)=>Math.round(n*1e6)/1e6;
 /** Most recent declared totals period, or the one requested. */
 export function pickPeriod(totals:Total[],wanted?:string){const periods=[...new Set(totals.map(t=>`${t.start}|${t.end}`))].sort((a,b)=>a.split('|')[1].localeCompare(b.split('|')[1])||a.localeCompare(b));return wanted&&periods.includes(wanted)?wanted:periods.at(-1)||''}
@@ -38,7 +41,11 @@ function crossSignals(totals:Total[],stores:Store[],period:string,stock:ReturnTy
 }
 export type AIParams={purpose:Purpose;dataset:string;start:string;end:string;channel:string;period?:string;report?:unknown};
 /** Builds the JSON context for one purpose. `saved` are persisted action decisions. */
-export function buildContext(p:AIParams,data:Data,stores:Store[],ops:OpsConfig,saved:{dataset:string;status:string;payload:string}[]){
+const clip=(v:unknown,n=240)=>String(v??'').replace(/[\u0000-\u001f]+/g,' ').slice(0,n);
+/** One insight as the model sees it: fact, numbers, hypotheses, recommendation and limits kept apart. Imported text is clipped. */
+export const compactInsight=(f:Finding)=>({prioridade:priorityLabels[f.priority],tipo:kindLabels[f.kind],unidade:f.storeName,titulo:clip(f.title,160),fato:clip(f.fact||f.evidence[0]),numeros:f.metrics,evidencias:f.evidence.slice(0,3).map(e=>clip(e)),hipoteses:(f.hypotheses||[]).map(h=>({hipotese:clip(h.text),apoio:h.support?clip(h.support):undefined,validarCom:h.validateWith})),recomendacao:clip(f.action||f.suggestion),limitacoes:(f.limitations||[]).slice(0,3).map(l=>clip(l))});
+export type ContextExtra={today?:string;config?:Partial<InsightConfig>;tables?:IdentityTables};
+export function buildContext(p:AIParams,data:Data,stores:Store[],ops:OpsConfig,saved:{dataset:string;status:string;payload:string}[],extra:ContextExtra={}){
  const totals=data.totals||[],period=pickPeriod(totals,p.period),stockDate=[...data.stock.map(s=>s.date)].sort().at(-1)||p.end;
  const asOf=p.end&&p.end>=stockDate?p.end:stockDate,stock=stockRows(data,stores,asOf,p.channel);
  const hasSales=data.sales.length>0,base:Record<string,unknown>={dataset:p.dataset,finalidade:p.purpose,unidadeFiltrada:p.channel==='all'?'todas':stores.find(s=>s.id===p.channel)?.name||p.channel,
@@ -53,8 +60,10 @@ export function buildContext(p:AIParams,data:Data,stores:Store[],ops:OpsConfig,s
    decisoes:plan.decisions.filter(d=>p.channel==='all'||d.to===p.channel||d.from===p.channel).slice(0,12),pedidosAtrasados:plan.overdue.length,
    qualidade:plan.quality.map(q=>({unidade:q.name,status:q.status,estoque:q.lastStock,controlesFaltantes:q.gaps.length,divergencias:q.mismatches.length,semCadastro:q.unknown}))}}
  const acoes=saved.filter(s=>s.dataset===p.dataset).reduce<Record<string,number>>((acc,s)=>{acc[s.status]=(acc[s.status]||0)+1;return acc},{});
- const achados=computeFindings(totals,data.stock,stores,{today:new Date().toISOString().slice(0,10),period}).filter(f=>p.channel==='all'||f.store==='all'||f.store===p.channel||f.from===p.channel||f.to===p.channel).slice(0,25).map(f=>({prioridade:priorityLabels[f.priority],tipo:kindLabels[f.kind],unidade:f.storeName,titulo:f.title,evidencias:f.evidence.slice(0,3),sugestaoCalculada:f.suggestion}));
- const ctx:Record<string,unknown>={...base,achadosCalculados:achados,vendasConsolidadas:vendas,estoque,sinaisVendasEstoque:sinais,operacional};
+ const {insights,readiness:rd}=computeInsights({totals,stock:data.stock,stores,goals:data.goals,sales:data.sales.length,purchases:data.purchases,routes:(ops.routes||[]).length,saved,today:extra.today||new Date().toISOString().slice(0,10),period,config:extra.config,tables:extra.tables});
+ const scoped=insights.filter(f=>p.channel==='all'||f.store==='all'||f.store===p.channel||f.from===p.channel||f.to===p.channel).filter(f=>p.purpose!=='planning'||!['desempenho','mix','ranking'].includes(f.kind)).slice(0,25);
+ const diagnostico={periodo:rd.period?{inicio:rd.period.start,fim:rd.period.end,parcial:rd.period.partial}:null,comparacao:rd.previous?{inicio:rd.previous.start,fim:rd.previous.end,metodo:rd.previous.label}:null,estoque:rd.stockDates.map(s=>({unidade:s.name,data:s.date,dias:s.ageDays})),limitacoes:rd.limitations,analises:rd.capabilities.map(c=>({analise:c.label,situacao:c.status,motivo:c.reason,falta:c.missing}))};
+ const ctx:Record<string,unknown>={...base,diagnosticoDados:diagnostico,achadosCalculados:scoped.map(compactInsight),definicoes:metricBrief(scoped.flatMap(f=>f.metricIds||[])),vendasConsolidadas:vendas,estoque,sinaisVendasEstoque:sinais,operacional};
  if(p.purpose==='planning')ctx.parametrosAbastecimento={prazoFornecimentoDias:ops.leadDays,segurancaDias:ops.safetyDays,coberturaAlvoDias:ops.targetDays,rotas:(ops.routes||[]).length};
  if(p.purpose==='actions')ctx.acoesRegistradas=acoes;
  return JSON.stringify({...ctx,limitacoes:limitations});

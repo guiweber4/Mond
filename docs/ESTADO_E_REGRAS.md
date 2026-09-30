@@ -129,3 +129,7 @@ Pendências desta etapa: provisionar o projeto Supabase e o projeto Vercel (exig
 ## IA por finalidade (30/09/2026)
 
 `lib/ai-core.ts` define cinco finalidades com instruções e limites próprios: análise do período, leitura de relatório (anexada ao relatório salvo), apresentação executiva (slides `## Título` + marcadores, salva em Relatórios), abastecimento e plano de ação. `lib/ai-context.ts` monta o contexto só com números calculados: vendas consolidadas do período mais recente, saldo por unidade/categoria, sinais vendas × estoque por referência (vendeu e está com saldo ≤ 1, com saldo em outras unidades; saldo ≥ 5 sem venda no período) e, quando houver vendas transacionais, riscos/decisões/qualidade do abastecimento. Sem vendas diárias, a IA é instruída a não estimar consumo, cobertura ou quantidades. Gerar é liberado a qualquer usuário logado; chaves e conexões continuam só com o administrador. Limite global por hora: `AI_HOURLY_LIMIT` (padrão 30). Teste: `tests/ai.test.mjs`.
+
+## Motor de insights (02/10/2026)
+
+Camadas de dados confiáveis, métricas, diagnósticos, interpretação e acompanhamento. Os detalhes, o que já funciona, o que depende de novas fontes e a configuração (`STORE_ACCESS`, `settings.insights`, `reference_aliases`, `reference_types`) estão em `docs/MOTOR_DE_INSIGHTS.md`. Sem migração de banco.

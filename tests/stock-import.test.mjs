@@ -1,32 +1,14 @@
 import fs from 'node:fs/promises';
-import os from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
-import {DatabaseSync} from 'node:sqlite';
-import ts from 'typescript';
 import XLSX from 'xlsx';
-const tmp=await fs.mkdtemp(path.join(os.tmpdir(),'mondepars-import-'));
-for(const name of ['presence-stock','model','imports','totals','report','operations','demo-operations']){
- const source=await fs.readFile(new URL(`../lib/${name}.ts`,import.meta.url),'utf8');
- await fs.writeFile(path.join(tmp,name+'.mjs'),ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/from '(\.\/[^']+)'/g,"from '$1.mjs'"));
-}
-const {defaultStores}=await import(path.join(tmp,'model.mjs'));
-const {normalizeRows,guessMapping,validateNormalized}=await import(path.join(tmp,'imports.mjs'));
-const {summarizeTotals}=await import(path.join(tmp,'totals.mjs'));
-const db=new DatabaseSync(':memory:');
-for(const file of (await fs.readdir(new URL('../drizzle',import.meta.url))).filter(f=>f.endsWith('.sql')).sort())db.exec(await fs.readFile(new URL('../drizzle/'+file,import.meta.url),'utf8'));
-let queries=0;
-globalThis.testDB={prepare(sql){const statement={bind(...args){statement.args=args;return statement},async first(){return db.prepare(sql).get(...(statement.args||[]))||null},async all(){return {results:db.prepare(sql).all(...(statement.args||[]))}},async run(){queries++;return db.prepare(sql).run(...(statement.args||[]))}};return statement},async batch(statements){db.exec('BEGIN');try{for(const s of statements)await s.run();db.exec('COMMIT')}catch(e){db.exec('ROLLBACK');throw e}}};
-globalThis.testBucket={async put(){}};
-const dbSource=(await fs.readFile(new URL('../lib/db.ts',import.meta.url),'utf8')).replace("import { env } from 'cloudflare:workers';","const env={DB:globalThis.testDB,BUCKET:globalThis.testBucket};");
-await fs.writeFile(path.join(tmp,'db.mjs'),ts.transpileModule(dbSource,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText);
-let route=await fs.readFile(new URL('../app/api/import/route.ts',import.meta.url),'utf8');
-await fs.writeFile(path.join(tmp,'route.mjs'),ts.transpileModule(route,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/from ['"]@\/lib\/([^'"]+)['"]/g,"from './$1.mjs'"));
-const {POST}=await import(path.join(tmp,'route.mjs'));
-const {presenceStockFields}=await import(path.join(tmp,'presence-stock.mjs'));
-const {norm}=await import(path.join(tmp,'imports.mjs'));
-const {readRecords}=await import(path.join(tmp,'db.mjs'));
-const {inventory}=await import(path.join(tmp,'model.mjs'));
+import {setup} from './harness.mjs';
+const h=await setup('stock');
+const {defaultStores,inventory}=await h.load('model');
+const {normalizeRows,guessMapping,validateNormalized,norm}=await h.load('imports');
+const {presenceStockFields}=await h.load('presence-stock');
+const {POST}=await h.load('route');
+const {readRecords}=h.db;
 const date='2026-09-29',fixtures=process.argv[2];let total=0,combined=[],lastSend,lastRows;
 for(const file of (await fs.readdir(fixtures)).filter(f=>f.startsWith('SALDO')&&f.endsWith('.xlsx'))){
  const bytes=await fs.readFile(path.join(fixtures,file)),wb=XLSX.read(bytes),raw=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''}),headers=Object.keys(raw[0]);
@@ -45,4 +27,9 @@ assert.equal(combined.length,7039);assert.equal(Math.round(total*10)/10,8445.2);
 const reduced=lastRows.slice(1);assert.equal((await lastSend(reduced)).status,200);let data=await readRecords();assert.equal(data.stock.filter(r=>r.store===lastRows[0].store).length,reduced.length,'replacing same date removes absent variants');
 assert.equal((await (await lastSend(lastRows)).json()).count,lastRows.length,'older file can become current again');data=await readRecords();assert.equal(data.stock.length,7039);
 const legacy=normalizeRows([{data:date,loja:'02',sku:'LEGACY',estoque:10,reservado:2,transito:1}],guessMapping(['data','loja','sku','estoque','reservado','transito'],'stock'),'stock',defaultStores);assert.deepEqual(legacy.errors,[]);validateNormalized(legacy.rows,'stock',defaultStores);
-await fs.rm(tmp,{recursive:true,force:true});console.log('Passed: actual XLSX parsing, database writes/reads, negative and fractional quantities, source balances, snapshot replacement, retries, legacy input and inventory display.');
+// Upload flow used by the browser: original already in Storage, referenced by key.
+const key=`imports/${crypto.randomUUID()}/original`;await h.stats.files.set(key,1000);const viaKey=await POST(new Request('https://test/api/import',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({kind:'stock',rows:lastRows.map(r=>({...r,id:r.id.replace(date,'2026-09-30'),date:'2026-09-30'})),fileName:'via-storage.xlsx',fileKey:key})}));assert.equal(viaKey.status,200,await viaKey.clone().text());
+const missing=await POST(new Request('https://test/api/import',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({kind:'stock',rows:lastRows,fileName:'x.xlsx',fileKey:`imports/${crypto.randomUUID()}/original`})}));assert.equal(missing.status,400,'arquivo ausente no Storage é recusado');
+const bad=await POST(new Request('https://test/api/import',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({kind:'stock',rows:[{...lastRows[0],physical:'x'}],fileName:'x.xlsx',fileBase64:'AA=='})}));assert.equal(bad.status,400);
+assert.equal((await h.pg.query("SELECT count(*)::int AS n FROM imports WHERE status<>'ready'")).rows[0].n,0,'nenhuma importação parcial ou pendente');
+await h.cleanup();console.log('Passed: actual XLSX parsing, database writes/reads, negative and fractional quantities, source balances, snapshot replacement, retries, legacy input and inventory display.');

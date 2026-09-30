@@ -282,3 +282,33 @@ details.collapsible[open]>summary::after{transform:rotate(180deg)}
 .ov-bars em{grid-column:2/4;color:var(--ink-3)}
 @media(max-width:900px){.attention-list,.overview-grid{grid-template-columns:1fr}.ov-bars>div,.ov-bars>button{grid-template-columns:1fr 90px;}.ov-bars .rv-bar{grid-column:1/3;grid-row:2}.ov-bars strong{grid-row:1;grid-column:2}}
 .attention-item p svg,.rv-att p svg{display:inline;vertical-align:-2px;margin-right:2px}
+
+/* ── Cards de achados v2: número + ação curta, detalhes recolhidos ─ */
+.fgroups{display:flex;flex-direction:column;gap:8px;padding:8px 24px 22px}
+.fgroup-title{display:flex;align-items:center;gap:8px;margin:14px 0 10px;font-size:13px;font-weight:600;letter-spacing:.3px;color:var(--ink)}
+.fgroup-title span{font-size:12px;font-weight:600;background:#eef1f5;color:var(--ink-2);border-radius:999px;padding:2px 8px}
+.fcard-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.fcard{display:flex;flex-direction:column;gap:10px;background:#fff;border:1px solid var(--line);border-left:4px solid #6f8fa0;border-radius:10px;padding:14px 16px}
+.fcard.alta{border-left-color:#b4462f}.fcard.media{border-left-color:#c79a2e}.fcard.baixa{border-left-color:#6f8fa0}
+.fcard.closed{opacity:.6}
+.fcard-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.fcard-unit{font-size:12px;font-weight:600;color:var(--ink-2);background:#f1f4f7;border-radius:5px;padding:2px 8px}
+.fcard h4{margin:0;font-size:16px;font-weight:600;line-height:1.3;color:var(--ink)}
+.fcard-sub{margin:-6px 0 0;font-size:12.5px;color:var(--ink-3)}
+.fcard-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(80px,1fr));gap:6px;margin:0}
+.fcard-metrics div{background:#f7f9fb;border:1px solid var(--line-soft);border-radius:7px;padding:7px 9px;min-width:0}
+.fcard-metrics dt{font-size:11px;line-height:1.25;color:var(--ink-3)}
+.fcard-metrics dd{margin:2px 0 0;font-size:17px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+.fcard-metrics .bad dd{color:#9b3a26}.fcard-metrics .good dd{color:#23613f}
+.fcard-action{display:flex;gap:8px;align-items:flex-start;background:#eef6f2;border:1px solid #d3e7dc;border-radius:8px;padding:9px 11px;color:#1f4d38;font-size:13.5px;line-height:1.4}
+.fcard-action svg{flex:none;margin-top:1px}
+.fcard-more summary{cursor:pointer;font-size:12.5px;color:var(--petrol);font-weight:500;list-style:none}
+.fcard-more summary::-webkit-details-marker{display:none}
+.fcard-more summary::before{content:'▸ '}
+.fcard-more[open] summary::before{content:'▾ '}
+.fcard-more ul{margin:8px 0 6px;padding-left:18px;font-size:12.5px;line-height:1.5;color:var(--ink-2)}
+.fcard-more p{margin:0;font-size:12.5px;color:var(--ink-3);line-height:1.5}
+.fcard footer{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:auto;padding-top:2px}
+.fcard footer small{font-size:12px;color:var(--ink-3)}
+@media(max-width:767px){.fgroups{padding:4px 16px 16px}.fcard-grid{grid-template-columns:1fr}.fcard .finding-actions{margin-left:0;width:100%}.fcard .finding-actions .btn{flex:1}}
+.ai-cards{margin-bottom:12px}

@@ -15,7 +15,7 @@ for(const f of await fs.readdir(fixtures)){if(/RJ/.test(f))continue;const wb=XLS
 const out=F.computeFindings(totals,stock,defaultStores,{today:'2026-09-30'});
 assert.ok(out.length>20);assert.equal(new Set(out.map(f=>f.id)).size,out.length,'ids únicos e estáveis');
 assert.deepEqual(F.computeFindings(totals,stock,defaultStores,{today:'2026-09-30'}).map(f=>f.id),out.map(f=>f.id),'determinístico');
-assert.ok(out.every(f=>f.title&&f.suggestion&&f.evidence.length),'todo achado tem evidência e sugestão');
+assert.ok(out.every(f=>f.title&&f.suggestion&&f.evidence.length),'todo achado tem evidência e sugestão');assert.ok(out.filter(f=>f.kind!=='dados').every(f=>f.action&&f.metrics?.length>=2&&f.subtitle),'cards com números e ação curta');
 const rank={alta:0,media:1,baixa:2};assert.ok(out.every((f,i)=>i===0||rank[out[i-1].priority]<=rank[f.priority]),'ordenado por prioridade');
 // RJ has no files: data findings instead of fake zeros.
 assert.ok(out.some(f=>f.id==='dados:vendas:05:2026-09-01|2026-09-30')&&out.some(f=>f.id==='dados:estoque:05'));assert.ok(!out.some(f=>f.kind!=='dados'&&(f.store==='05'||f.to==='05'||f.from==='05')));
@@ -23,7 +23,7 @@ assert.ok(out.some(f=>f.id==='dados:vendas:05:2026-09-01|2026-09-30')&&out.some(
 const bal=(store,ref)=>stock.filter(r=>r.store===store&&r.reference.trim()===ref).reduce((a,r)=>a+r.physical,0),sold=(store,ref)=>totals.filter(t=>t.store===store&&t.reference.trim()===ref).reduce((a,t)=>a+t.qty,0);
 for(const f of out.filter(f=>f.kind==='ruptura')){const b=bal(f.from,f.reference),own=sold(f.from,f.reference),spare=Math.floor(own>0?b-own:b/2);assert.ok(f.qty>=1&&f.qty<=spare,`${f.id}: ${f.qty} ≤ ${spare}`);assert.ok(bal(f.to,f.reference)<=0);assert.ok(sold(f.to,f.reference)>0)}
 const perfume=out.find(f=>f.reference==='10HO0001'&&f.to==='02');assert.ok(perfume,'PERFUME KYOTO sem saldo na JK é sinalizado');
-assert.ok(out.filter(f=>f.kind==='negativo').every(f=>/saldo negativo/.test(f.title)));
+assert.ok(out.filter(f=>f.kind==='negativo').every(f=>/saldo negativo/i.test(f.title)&&f.metrics.length===2));
 // Report: readable, bounded and reconciled.
 const rep=R.consolidatedReport(totals,defaultStores,'2026-09-01','2026-09-30','all',{stock,today:'2026-09-30'});
 assert.equal(rep.revenue,2268565.55);assert.equal(rep.units,2681);assert.ok(rep.products.length<=10&&rep.categories.length<=8&&rep.attention.length<=6);

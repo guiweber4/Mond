@@ -5,6 +5,10 @@ import type { NextConfig } from "next";
 const pick = (...names: string[]) => names.map((n) => process.env[n]?.trim()).find(Boolean) ?? "";
 
 const nextConfig: NextConfig = {
+  experimental: {
+    // Deterministic production builds: a restored Turbopack cache once shipped a stale globals.css.
+    turbopackFileSystemCacheForBuild: false,
+  },
   env: {
     NEXT_PUBLIC_SUPABASE_URL: pick("NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_URL"),
     NEXT_PUBLIC_SUPABASE_ANON_KEY: pick(

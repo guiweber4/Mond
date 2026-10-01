@@ -8,6 +8,8 @@ import {metricBrief,type MetricId} from './metrics';
 import {searchKey} from './catalog';
 import {br,type Capability} from './readiness';
 import type {Hypothesis} from './findings';
+import {purchasePlan} from './purchasing';
+import type {OpsConfig} from './operations';
 export type Intent='desempenho'|'mix'|'grade'|'excesso'|'transferencia'|'prioridades'|'apostas'|'compras'|'mudancas'|'ecommerce';
 export const intentLabels:Record<Intent,string>={desempenho:'Desempenho de vendas',mix:'Categorias e modelos',grade:'Cores, tamanhos e grade',excesso:'Estoque alto e pouca saída',transferencia:'Transferências entre unidades',prioridades:'Prioridades comerciais',apostas:'Apostas da coleção',compras:'Compras e pedidos',mudancas:'O que mudou',ecommerce:'E-commerce'};
 export const exampleQuestions=['O que explica a queda de vendas da JK?','Dentro de calças, quais modelos perderam participação?','Quais cores e tamanhos merecem atenção?','Quais produtos têm estoque alto e pouca saída?','O que devemos avaliar para transferir entre RJ e JK?','Quais são as prioridades comerciais desta semana?','Como as apostas da coleção estão performando?','O que mudou desde o último relatório?'];
@@ -20,7 +22,7 @@ export function parseQuestion(question:string,ctx:{stores:{id:string;name:string
  let intent:Intent='prioridades';
  if(has(q,/ mudou | mudanca| desde o ultimo| ultimo relatorio| novidade/))intent='mudancas';
  else if(has(q,/ aposta| colecao| colecoes/))intent='apostas';
- else if(has(q,/ compra| pedidos? de compra| fornecedor| otb /))intent='compras';
+ else if(has(q,/ compra| pedidos? de compra| fornecedor| otb | pedir | repor /))intent='compras';
  else if(has(q,/ transfer| remanej| realoc| entre (as )?(lojas|unidades)/))intent='transferencia';
  else if(has(q,/ estoque alto| pouca saida| parad| encalh| excesso| sobra/))intent='excesso';
  else if(has(q,/ cor | cores | tamanho| grade /))intent='grade';
@@ -32,7 +34,7 @@ export function parseQuestion(question:string,ctx:{stores:{id:string;name:string
  if(has(q,/ semana| hoje| ontem/)&&!period)periodNote='As vendas importadas são totalizações por período; não há recorte por dia ou semana. Usei o período mais recente.';
  return {intent,stores,category,period,periodNote};
 }
-export type AskInput=InsightInput&{question:string;channel?:string;allowedStores?:string[]|null;previous?:{snapshot:Snapshot[];title:string;createdAt:string}|null};
+export type AskInput=InsightInput&{ops?:Partial<OpsConfig>;question:string;channel?:string;allowedStores?:string[]|null;previous?:{snapshot:Snapshot[];title:string;createdAt:string}|null};
 export type Answer={question:string;intent:Intent;intentLabel:string;scope:{stores:string[];storeNames:string[];category?:string;period:string;periodSource:'pergunta'|'padrao';stock:string[]};headline:string;facts:string[];hypotheses:Hypothesis[];recommendations:string[];limitations:string[];evidence:{id:string;title:string;kind:string;priority:string;fact:string}[];metricIds:MetricId[];capabilities:Capability[]};
 /** Removes other units' data before any calculation, so network totals, evidence and caches only contain allowed units. */
 export function restrictInput<T extends InsightInput>(input:T,allowed?:string[]|null):T{if(!allowed)return input;const ok=new Set(allowed);return {...input,stores:input.stores.filter(s=>ok.has(s.id)),totals:input.totals.filter(t=>ok.has(t.store)),stock:input.stock.filter(s=>ok.has(s.store)),goals:input.goals?.filter(g=>ok.has(g.store)),purchases:input.purchases?.filter(p=>ok.has(p.store)),saved:input.saved?.filter(s=>{try{const p=JSON.parse(s.payload);return [p.store,p.from,p.to].filter(Boolean).every((x:string)=>ok.has(x))}catch{return false}})}}
@@ -57,7 +59,10 @@ export function answerQuestion(input:AskInput):{answer:Answer;insights:Insight[]
   case 'transferencia':picked=sel(['ruptura','realocar'],f=>stores.length<2||(stores.includes(f.from||'')&&stores.includes(f.to||'')));picked.push(...sel(['grade'],f=>f.id.includes('tamanhos')));extraLimits.push('Transferência é uma oportunidade para avaliar; nenhuma movimentação é executada.');for(const s of stores)if(!rd.stockStores.includes(s))extraLimits.push(`${input.stores.find(x=>x.id===s)?.name||s} sem posição de estoque: não entra nas sugestões.`);break;
   case 'prioridades':picked=insights.filter(f=>inScope(f)&&f.priority!=='baixa').slice(0,8);if(!picked.length)picked=insights.filter(inScope).slice(0,5);break;
   case 'ecommerce':picked=[...sel(['ecommerce']),...sel(['ruptura','reposicao'],f=>input.stores.find(s=>s.id===f.to)?.type==='online').slice(0,3)];break;
-  case 'compras':picked=sel(['compras']);break;
+  case 'compras':{picked=sel(['compras']);const pp=purchasePlan({totals:scoped.totals,stock:scoped.stock,stores:scoped.stores,ops:input.ops,purchases:scoped.purchases,saved:scoped.saved,period:parsed.period||input.period,tables:input.tables});
+   if(!pp||!pp.suggestions.length)extraFacts.push(pp?'Com o estoque atual, nenhum modelo precisa de compra no horizonte configurado.':'Sem totalização de vendas: não há base para sugerir compras.');
+   else{const top=pp.suggestions.filter(x=>!stores.length||x.split.some(y=>stores.includes(y.store))).slice(0,6);extraFacts.push(`Sugestão de compra: ${pp.summary.pieces.toLocaleString('pt-BR')} peças em ${pp.summary.models} modelos (${pp.summary.alta} de urgência alta). ${pp.method}`,...top.map(x=>`${x.model} (${x.reference}): pedir ${x.qty} peças · vendeu ${x.sold} · saldo na rede ${x.stock}${x.coverage!==null?` · ${x.coverage} dias de cobertura`:''} · urgência ${x.urgency==='media'?'média':x.urgency} · curva ${x.abc}`));extraLimits.push(...pp.limitations.slice(0,3))}
+   break}
   case 'mudancas':{if(!input.previous)extraFacts.push('Nenhum relatório anterior tem registro de achados; a comparação começa a partir do próximo relatório salvo.');else{const d=diffInsights(input.previous.snapshot,insights.filter(inScope));extraFacts.push(`Comparado com “${input.previous.title}” (${new Date(input.previous.createdAt).toLocaleDateString('pt-BR')}): ${d.novos.length} novos, ${d.alterados.length} com números diferentes, ${d.resolvidos.length} que não aparecem mais e ${d.mantidos.length} sem mudança.`,...d.novos.slice(0,4).map(f=>`Novo: ${f.title}`),...d.alterados.slice(0,3).map(f=>`Mudou: ${f.title}`),...d.resolvidos.slice(0,3).map(s=>`Não aparece mais: ${s.title}`));picked=[...d.novos,...d.alterados].slice(0,6)}break}
   case 'apostas':break;
  }

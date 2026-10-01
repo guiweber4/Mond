@@ -3,7 +3,7 @@
  * evidence and one suggestion. No daily demand, coverage or purchase quantity is inferred from monthly totals.
  */
 import {summarizeTotals,type Total} from './totals';
-import type {Stock,Store} from './model';
+import {asEffective,type Stock,type Store} from './model';
 import {canonColor,canonSize,categoryIndex,resolveCategory,NO_CATEGORY} from './catalog';
 import type {MetricId} from './metrics';
 export type Priority='alta'|'media'|'baixa';
@@ -19,8 +19,8 @@ export const priorityLabels:Record<Priority,string>={alta:'Alta',media:'Média',
 const n=(v:number)=>v.toLocaleString('pt-BR',{maximumFractionDigits:1});
 const pcs=(v:number)=>`${n(v)} ${Math.abs(v)===1?'peça':'peças'}`;
 const r6=(v:number)=>Math.round(v*1e6)/1e6;
-/** Latest snapshot per unit (same rule as the stock screen). */
-export function latestStock(stock:Stock[]){const last=new Map<string,string>();for(const s of stock)if(!last.has(s.store)||s.date>last.get(s.store)!)last.set(s.store,s.date);return stock.filter(s=>s.date===last.get(s.store))}
+/** Latest snapshot per unit (same rule as the stock screen); negative balances read as zero (see asEffective). */
+export function latestStock(stock:Stock[]){const last=new Map<string,string>();for(const s of stock)if(!last.has(s.store)||s.date>last.get(s.store)!)last.set(s.store,s.date);return stock.filter(s=>s.date===last.get(s.store)).map(asEffective)}
 export function latestPeriod(totals:Total[]){return [...new Set(totals.map(t=>`${t.start}|${t.end}`))].sort((a,b)=>a.split('|')[1].localeCompare(b.split('|')[1])||a.localeCompare(b)).at(-1)||''}
 type Opts={today:string;staleDays?:number;period?:string};
 export function computeFindings(totals:Total[],stockAll:Stock[],stores:Store[],opts:Opts):Finding[]{
@@ -51,9 +51,6 @@ export function computeFindings(totals:Total[],stockAll:Stock[],stores:Store[],o
   if(d){const qty=Math.min(Math.ceil(v.qty),d.spare);out.push({id:`ruptura:${store}:${ref}:${period}`,kind:'ruptura',priority:hot?'alta':'media',store,storeName:name(store),title:v.model,subtitle:`${ref} · ${where}`,action:`Avaliar transferência de até ${pcs(qty)} de ${short(d.store)} para ${short(store)}`,stockInformed:informed,metrics:[{label:'Vendeu',value:pcs(v.qty)},{label:`Saldo ${short(store)}`,value:balLabel,tone:'bad'},{label:`Livre ${short(d.store)}`,value:pcs(d.spare),tone:'good'}],evidence:[...base,`Saldo em outras unidades: ${donors.slice(0,3).map(x=>`${name(x.store)} ${n(x.saldo)}${x.own?` (vendeu ${n(x.own)})`:''}`).join(' · ')}.`],suggestion:`Avaliar transferência de até ${pcs(qty)} de ${name(d.store)} para ${name(store)}, preservando o que a origem vendeu no período e conferindo cor, tamanho e rota.`,reference:ref,model:v.model,category:v.category,from:d.store,to:store,qty})}
   else out.push({id:`reposicao:${store}:${ref}:${period}`,kind:'reposicao',priority:hot?'alta':'media',store,storeName:name(store),title:v.model,subtitle:`${ref} · ${where}${donors.length?' e sem saldo livre na rede':' nem na rede'}`,action:'Avaliar reposição com fornecedor ou produção',stockInformed:informed,metrics:[{label:'Vendeu',value:pcs(v.qty)},{label:`Saldo ${short(store)}`,value:balLabel,tone:'bad'},{label:'Livre na rede',value:'0',tone:'bad'}],evidence:[...base,donors.length?`Outras unidades têm saldo, mas precisam dele para as próprias vendas: ${donors.slice(0,3).map(x=>`${name(x.store)} ${n(x.saldo)} (vendeu ${n(x.own)})`).join(' · ')}.`:'Nenhuma outra unidade tem saldo positivo desta referência.'],suggestion:'Avaliar reposição com fornecedor ou produção; confirmar se o modelo segue na coleção antes de pedir.',reference:ref,model:v.model,category:v.category,to:store});
  }
- // Negative balances per unit (aggregated card).
- for(const store of stockUnits){const neg=stock.filter(r=>r.store===store&&r.physical<0);if(!neg.length)continue;const sum=r6(neg.reduce((a,r)=>a+r.physical,0));const worst=[...neg].sort((a,b)=>a.physical-b.physical).slice(0,5);
-  out.push({id:`negativo:${store}:${byStoreDate.get(store)}`,kind:'negativo',priority:neg.length>=20?'media':'baixa',store,storeName:name(store),title:`Saldo negativo em ${short(store)}`,subtitle:`${neg.length} variações abaixo de zero`,action:'Conferir entradas e transferências na Presence',metrics:[{label:'Variações',value:n(neg.length),tone:'bad'},{label:'Soma',value:n(sum),tone:'bad'}],evidence:[`Soma dos saldos negativos: ${n(sum)}.`,...worst.map(r=>`${r.model} (${r.reference}) · ${canonColor(r.color)} · ${canonSize(r.size).label}: ${n(r.physical)}`)],suggestion:'Conferir na Presence entradas, transferências e devoluções não registradas; saldo negativo costuma indicar venda sem entrada lançada.'})}
  // Idle stock where the unit has a sales file for the period.
  for(const store of stockUnits){if(!salesUnits.has(store))continue;const idle=[...refBal].filter(([k,b])=>k.startsWith(store+'|')&&b.saldo>=5&&!sold.has(k)).map(([k,b])=>({ref:k.split('|')[1],...b})).sort((a,b)=>b.saldo-a.saldo);if(!idle.length)continue;
   // Sold elsewhere: concrete reallocation cards (top 3 per unit).

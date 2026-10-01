@@ -19,7 +19,7 @@ for(const file of (await fs.readdir(fixtures)).filter(f=>f.startsWith('SALDO')&&
  const send=rows=>POST(new Request('https://test/api/import',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({kind:'stock',rows,fileName:file,fileBase64:bytes.toString('base64')})}));
  const response=await send(v.rows),result=await response.json();assert.equal(response.status,200,JSON.stringify(result));assert.equal(result.count,v.rows.length);assert.equal((await (await send(v.rows)).json()).duplicate,true);
  const data=await readRecords(),stock=data.stock.filter(r=>r.store===store);assert.equal(stock.length,v.rows.length);assert.equal(Math.round(stock.reduce((a,r)=>a+r.physical,0)*1e6)/1e6,control);
- const shown=inventory(data,defaultStores,date,store);assert.equal(shown.length,v.rows.length);assert.ok(shown.every(r=>r.model&&r.color!=='—'&&r.size!=='—'));assert.equal(shown.filter(r=>r.physical<0).length,v.rows.filter(r=>r.physical<0).length);
+ const shown=inventory(data,defaultStores,date,store);assert.equal(shown.length,v.rows.length);assert.ok(shown.every(r=>r.model&&r.color!=='—'&&r.size!=='—'));assert.ok(shown.every(r=>r.physical>=0),'negativo conta como zero');assert.equal(shown.filter(r=>r.reported<0).length,v.rows.filter(r=>r.physical<0).length,'valor original preservado em reported');
  assert.ok(normalizeRows([...raw.slice(0,-1),{...raw.at(-1),'Saldo Base':control+1}],mapping,'stock',defaultStores,{store,start:date,end:date,date}).errors.length);
  total+=control;combined.push(...v.rows);lastSend=send;lastRows=v.rows;console.log(`${file}: ${raw.length-1} lines -> ${v.rows.length} variants, ${sum} balance reconciled; ${v.mergedRows} repeated lines merged.`);
 }

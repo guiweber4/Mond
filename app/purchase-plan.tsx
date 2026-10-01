@@ -1,0 +1,47 @@
+'use client';
+import {useMemo,useState} from 'react';
+import {ShoppingCart,Download,Check,X,ChevronDown,Info,Search} from 'lucide-react';
+import {purchaseRows,type PurchasePlan as Plan,type Suggestion} from '@/lib/purchasing';
+import {priorityLabels} from '@/lib/findings';
+import {colorLabel} from '@/lib/color-swatch';
+import {searchKey,sizeOrder,colorOrder} from '@/lib/catalog';
+import {Swatch} from './overview-visual';
+import type {OpsConfig} from '@/lib/operations';
+import {toast} from 'sonner';
+const brl=(n:number)=>Math.abs(n)>=1e6?`R$ ${(n/1e6).toLocaleString('pt-BR',{maximumFractionDigits:2})} mi`:Math.abs(n)>=1e4?`R$ ${(n/1e3).toLocaleString('pt-BR',{maximumFractionDigits:0})} mil`:n.toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
+const int=(n:number)=>n.toLocaleString('pt-BR',{maximumFractionDigits:1});
+type Decide=(s:Suggestion,status:'approved'|'dismissed'|'done')=>Promise<void>;
+/** Purchase grid: colors × sizes with the pieces to order; stock and sales in the tooltip. */
+function Grade({s}:{s:Suggestion}){const lines=s.lines,colors=[...new Set(lines.map(l=>l.color))].sort(colorOrder),sizes=[...new Set(lines.map(l=>l.size))].sort(sizeOrder);
+ return <div className="table-scroll"><table className="po-grade"><thead><tr><th>Cor</th>{sizes.map(z=><th key={z}>{z}</th>)}<th>Total</th></tr></thead><tbody>{colors.map(c=>{const row=lines.filter(l=>l.color===c);return <tr key={c}><th scope="row"><span className="po-color"><Swatch color={colorLabel(c)}/>{colorLabel(c).toLowerCase()}</span></th>{sizes.map(z=>{const l=row.find(x=>x.size===z);return <td key={z} className={l?.qty?'buy':''} title={l?`Pedir ${l.qty} · vendeu ${int(l.sold)} · saldo ${int(l.stock)}${l.open?` · em aberto ${l.open}`:''}${l.coverage!==null?` · ${l.coverage} dias`:''}`:'não vendeu'}>{l?<><b>{l.qty||'—'}</b><small>{int(l.stock)} / {int(l.sold)}</small></>:<span className="muted">·</span>}</td>})}<td className="tot"><b>{row.reduce((a,l)=>a+l.qty,0)}</b></td></tr>})}</tbody></table><p className="po-legend">Em cada célula: <b>peças a pedir</b> e, abaixo, saldo na rede / vendido no período.</p></div>}
+function Row({s,decide,busy}:{s:Suggestion;decide:Decide;busy:boolean}){const [open,setOpen]=useState(false);
+ return <li className={'po-row '+s.urgency+(s.status!=='pending'?' decided':'')}>
+  <div className="po-main"><span className={'abc abc-'+s.abc} title={`Curva ${s.abc}: ${s.abc==='A'?'modelos que somam 80% do valor':s.abc==='B'?'próximos 15% do valor':'últimos 5% do valor'}`}>{s.abc}</span>
+   <div className="po-name"><b>{s.model}</b><small>{s.reference} · {s.category}</small></div>
+   <div className="po-num n-sold"><span>Vendeu</span><b>{int(s.sold)}</b></div><div className="po-num n-stock"><span>Saldo</span><b className={s.stock<=0?'neg':''}>{int(s.stock)}</b></div><div className="po-num n-cov"><span>Cobertura</span><b>{s.coverage===null?'—':`${s.coverage} d`}</b></div>
+   <div className="po-num strong"><span>Pedir</span><b>{s.qty}</b></div><div className="po-num n-val"><span>Valor venda</span><b>{s.value===null?'—':brl(s.value)}</b></div>
+   <div className="po-actions">{s.status==='pending'?<><button type="button" className="btn primary sm" disabled={busy} onClick={()=>decide(s,'approved')}><Check size={14}/>Aprovar</button><button type="button" className="btn secondary sm" disabled={busy} onClick={()=>decide(s,'dismissed')} title="Não sugerir de novo enquanto os números não mudarem">Não repor</button></>:<span className="badge ok">{s.status==='approved'?'Aprovado':'Concluído'}</span>}{s.status==='approved'&&<button type="button" className="btn secondary sm" disabled={busy} onClick={()=>decide(s,'done')}>Pedido feito</button>}<button type="button" className="text-button" aria-expanded={open} onClick={()=>setOpen(!open)}>Grade<ChevronDown size={14} className={open?'rot':''}/></button></div></div>
+  {open&&<div className="po-detail"><Grade s={s}/><div className="po-side"><div><h4>Divisão sugerida</h4><p className="po-split">{s.split.map(x=><span key={x.store} className="chip">{x.short} <b>{x.qty}</b></span>)}</p></div><div><h4>Por que</h4><ul>{s.reasons.map((r,i)=><li key={i}>{r}</li>)}</ul></div></div></div>}
+ </li>}
+export default function PurchasePlanView({plan,ops,onSaveParams,decide}:{plan:Plan|null;ops:OpsConfig;onSaveParams:(v:OpsConfig)=>Promise<void>;decide:Decide}){
+ const [busy,setBusy]=useState(''),[q,setQ]=useState(''),[cat,setCat]=useState(''),[form,setForm]=useState({leadDays:ops.leadDays,targetDays:ops.targetDays,safetyDays:ops.safetyDays,purchaseMinQty:ops.purchaseMinQty??2}),[showAll,setShowAll]=useState<Record<string,boolean>>({});
+ const list=useMemo(()=>(plan?.suggestions||[]).filter(s=>(!cat||s.category===cat)&&(!q.trim()||searchKey(`${s.model} ${s.reference}`).includes(searchKey(q.trim())))),[plan,q,cat]);
+ if(!plan)return <section className="panel empty-state"><ShoppingCart size={30}/><h3>Importe a totalização de vendas</h3><p>O racional de compras parte da venda do período e do Saldo Estoque das unidades.</p></section>;
+ const s=plan.summary,maxCat=Math.max(1,...s.byCategory.map(c=>c.qty));
+ async function act(x:Suggestion,status:'approved'|'dismissed'|'done'){setBusy(x.id);try{await decide(x,status)}finally{setBusy('')}}
+ async function exportXlsx(){try{const X=await import('xlsx'),wb=X.utils.book_new();X.utils.book_append_sheet(wb,X.utils.json_to_sheet(purchaseRows(plan!)),'Pedido sugerido');X.utils.book_append_sheet(wb,X.utils.json_to_sheet([{Periodo:plan!.periodLabel,Metodo:plan!.method},...plan!.limitations.map(l=>({Periodo:'',Metodo:l}))]),'Premissas');X.writeFile(wb,`Mondepars_Compras_${plan!.period.replace('|','_')}.xlsx`)}catch{toast.error('Não foi possível exportar.')}}
+ const groups=(['alta','media','baixa'] as const).map(u=>[u,list.filter(x=>x.urgency===u)] as const).filter(([,l])=>l.length);
+ return <div className="po">
+  <section className="panel po-head"><div className="po-title"><span className="eyebrow">RACIONAL DE COMPRAS</span><h2>O que pedir</h2><p>{plan.method} Venda de {plan.periodLabel}{plan.periodsUsed>1?` e ${plan.periodsUsed-1} período(s) anterior(es)`:''}.</p></div><button type="button" className="btn secondary" onClick={exportXlsx}><Download size={16}/>Exportar pedido (Excel)</button></section>
+  <div className="po-kpis"><div><span>Peças a pedir</span><strong>{int(s.pieces)}</strong><small>{s.variants} variações</small></div><div><span>Modelos</span><strong>{s.models}</strong><small>{s.alta} alta · {s.media} média · {s.baixa} baixa</small></div><div><span>Valor a preço de venda</span><strong>{brl(s.value)}</strong><small>Sem custo nos arquivos; não é orçamento</small></div><div className="po-cats"><span>Peças por categoria</span><ul>{s.byCategory.slice(0,5).map(c=><li key={c.name}><em>{c.name}</em><i style={{width:`${c.qty/maxCat*100}%`}}/><b>{int(c.qty)}</b></li>)}</ul></div></div>
+  <form className="po-params" onSubmit={async e=>{e.preventDefault();try{await onSaveParams({...ops,...form})}catch{}}}><span className="po-params-title">Parâmetros</span>
+   {([['leadDays','Entrega (dias)'],['targetDays','Cobertura (dias)'],['safetyDays','Segurança (dias)'],['purchaseMinQty','Mínimo vendido (peças)']] as const).map(([k,l])=><label key={k}>{l}<input type="number" min={k==='safetyDays'?0:1} max={k==='purchaseMinQty'?1000:365} value={form[k]} onChange={e=>setForm({...form,[k]:Number(e.target.value)})}/></label>)}
+   <button className="btn secondary sm" type="submit">Recalcular</button></form>
+  <div className="po-filters"><label className="search-field"><Search size={15} aria-hidden="true"/><input type="search" aria-label="Buscar modelo" value={q} onChange={e=>setQ(e.target.value)} placeholder="Modelo ou referência"/></label><select aria-label="Categoria" value={cat} onChange={e=>setCat(e.target.value)}><option value="">Todas as categorias</option>{s.byCategory.map(c=><option key={c.name} value={c.name}>{c.name}</option>)}</select><span className="detail-count">{list.length} modelos</span></div>
+  {groups.map(([u,items])=>{const max=u==='alta'?12:6,all=showAll[u]||items.length<=max;return <section key={u} className="po-group"><h3 className="fgroup-title">Urgência {priorityLabels[u].toLowerCase()}<span>{items.length}</span><small>{u==='alta'?'sem saldo na rede ou acaba antes da entrega':u==='media'?'variação vendida sem saldo ou cobertura curta':'reposição para manter a cobertura'}</small></h3>
+   <ul className="po-list">{(all?items:items.slice(0,max)).map(x=><Row key={x.id} s={x} decide={act} busy={busy===x.id}/>)}</ul>{items.length>max&&<button type="button" className="fgroup-more" onClick={()=>setShowAll({...showAll,[u]:!all})}>{all?'Mostrar menos':`Ver todos (${items.length})`}</button>}</section>})}
+  {plan.avoid.length>0&&<details className="panel po-avoid"><summary><X size={15}/>Não recomprar agora ({plan.avoid.length})</summary><ul>{plan.avoid.map(a=><li key={a.reference}><b>{a.model}</b> <small>{a.reference}</small> — saldo {int(a.stock)}, vendeu {int(a.sold)}. {a.reason}</li>)}</ul></details>}
+  {plan.dismissed.length>0&&<p className="info-line"><Info size={15}/>{plan.dismissed.length} modelo(s) marcados como “Não repor” ficam fora da sugestão até os números mudarem.</p>}
+  <details className="notice-mini" open><summary><Info size={15}/>Premissas e limites</summary><ul className="po-limits">{plan.limitations.map((l,i)=><li key={i}>{l}</li>)}</ul></details>
+ </div>
+}

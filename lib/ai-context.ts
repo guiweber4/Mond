@@ -7,6 +7,7 @@ import type {Purpose} from './ai-core';
 import {kindLabels,priorityLabels,type Finding} from './findings';
 import {computeInsights,type InsightConfig} from './insights';
 import {metricBrief} from './metrics';
+import {purchasePlan} from './purchasing';
 import type {IdentityTables} from './identity';
 const r2=(n:number)=>Math.round(n*100)/100,r6=(n:number)=>Math.round(n*1e6)/1e6;
 /** Most recent declared totals period, or the one requested. */
@@ -23,9 +24,9 @@ function salesBlock(totals:Total[],stores:Store[],period:string,channel:string){
 function stockRows(data:Data,stores:Store[],asOf:string,channel:string){return inventory(data,stores,asOf,channel)}
 function stockBlock(rows:ReturnType<typeof inventory>,totals:Total[]){
  if(!rows.length)return {disponivel:false,motivo:'Nenhuma posição de estoque importada até a data.'};
- const idx=categoryIndex(totals),byStore=new Map<string,{unidade:string;data:string;saldo:number;variacoes:number;negativas:number;zeradas:number;fracionadas:number}>(),byCat=new Map<string,number>();
- for(const r of rows){const s=byStore.get(r.store)||{unidade:r.storeName,data:r.date,saldo:0,variacoes:0,negativas:0,zeradas:0,fracionadas:0};s.saldo=r6(s.saldo+r.physical);s.variacoes++;if(r.physical<0)s.negativas++;if(r.physical===0)s.zeradas++;if(!Number.isInteger(r.physical))s.fracionadas++;byStore.set(r.store,s);const cat=r.reference?resolveCategory(r.reference,idx).category:NO_CATEGORY;byCat.set(cat,r6((byCat.get(cat)||0)+r.physical))}
- return {disponivel:true,fonte:'Saldo Estoque (Presence): Saldo Base por unidade; sem reservas, trânsito ou unidade de medida',porUnidade:[...byStore.values()],porCategoria:[...byCat].map(([categoria,saldo])=>({categoria,saldo})).sort((a,b)=>b.saldo-a.saldo).slice(0,12)};
+ const idx=categoryIndex(totals),byStore=new Map<string,{unidade:string;data:string;saldo:number;variacoes:number;negativasConsideradasZero:number;zeradas:number;fracionadas:number}>(),byCat=new Map<string,number>();
+ for(const r of rows){const s=byStore.get(r.store)||{unidade:r.storeName,data:r.date,saldo:0,variacoes:0,negativasConsideradasZero:0,zeradas:0,fracionadas:0};s.saldo=r6(s.saldo+r.physical);s.variacoes++;if((r.reported??0)<0)s.negativasConsideradasZero++;if(r.physical===0)s.zeradas++;if(!Number.isInteger(r.physical))s.fracionadas++;byStore.set(r.store,s);const cat=r.reference?resolveCategory(r.reference,idx).category:NO_CATEGORY;byCat.set(cat,r6((byCat.get(cat)||0)+r.physical))}
+ return {disponivel:true,fonte:'Saldo Estoque (Presence): Saldo Base por unidade, negativo considerado zero; sem reservas, trânsito ou unidade de medida',porUnidade:[...byStore.values()],porCategoria:[...byCat].map(([categoria,saldo])=>({categoria,saldo})).sort((a,b)=>b.saldo-a.saldo).slice(0,12)};
 }
 /** Sales (period total) next to current balance per unit and model. Signals only: no coverage or daily demand is derived. */
 function crossSignals(totals:Total[],stores:Store[],period:string,stock:ReturnType<typeof inventory>){
@@ -50,7 +51,7 @@ export function buildContext(p:AIParams,data:Data,stores:Store[],ops:OpsConfig,s
  const asOf=p.end&&p.end>=stockDate?p.end:stockDate,stock=stockRows(data,stores,asOf,p.channel);
  const hasSales=data.sales.length>0,base:Record<string,unknown>={dataset:p.dataset,finalidade:p.purpose,unidadeFiltrada:p.channel==='all'?'todas':stores.find(s=>s.id===p.channel)?.name||p.channel,
   unidadesEmOperacao:stores.filter(s=>s.status==='open').map(s=>({unidade:s.name,tipo:s.type==='online'?'e-commerce (estoque próprio)':'loja física'}))};
- const limitations=['Dados importados manualmente; a Presence não tem coleta automática ativa.','Totalizações não trazem datas diárias, pedidos, custos nem ticket.','Estoque não informa reservas, trânsito nem unidade de medida; saldos negativos e fracionados são preservados.'];
+ const limitations=['Dados importados manualmente; a Presence não tem coleta automática ativa.','Totalizações não trazem datas diárias, pedidos, custos nem ticket.','Estoque não informa reservas, trânsito nem unidade de medida. Saldo negativo significa venda antes do lançamento da entrada e conta como zero; saldos fracionados são preservados.'];
  if(p.purpose==='report'){return JSON.stringify({...base,relatorio:trimReport(p.report),limitacoes:limitations})}
  const vendas=salesBlock(totals,stores,period,p.channel),estoque=stockBlock(stock,totals),sinais=crossSignals(totals,stores,period,stock);
  let operacional:Record<string,unknown>={disponivel:false,motivo:'Sem vendas transacionais datadas: consumo diário, cobertura e sugestões quantitativas não são calculados.'};
@@ -64,6 +65,8 @@ export function buildContext(p:AIParams,data:Data,stores:Store[],ops:OpsConfig,s
  const scoped=insights.filter(f=>p.channel==='all'||f.store==='all'||f.store===p.channel||f.from===p.channel||f.to===p.channel).filter(f=>p.purpose!=='planning'||!['desempenho','mix','ranking'].includes(f.kind)).slice(0,25);
  const diagnostico={periodo:rd.period?{inicio:rd.period.start,fim:rd.period.end,parcial:rd.period.partial}:null,comparacao:rd.previous?{inicio:rd.previous.start,fim:rd.previous.end,metodo:rd.previous.label}:null,estoque:rd.stockDates.map(s=>({unidade:s.name,data:s.date,dias:s.ageDays})),limitacoes:rd.limitations,analises:rd.capabilities.map(c=>({analise:c.label,situacao:c.status,motivo:c.reason,falta:c.missing}))};
  const ctx:Record<string,unknown>={...base,diagnosticoDados:diagnostico,achadosCalculados:scoped.map(compactInsight),definicoes:metricBrief(scoped.flatMap(f=>f.metricIds||[])),vendasConsolidadas:vendas,estoque,sinaisVendasEstoque:sinais,operacional};
+ // Purchase rationale for supply and action plan: summary, method and the most urgent models (no cost: value at sale price).
+ if(p.purpose==='planning'||p.purpose==='actions'){const pp=purchasePlan({totals,stock:data.stock,stores,ops,purchases:data.purchases,saved,tables:extra.tables});if(pp)ctx.sugestaoCompras={metodo:pp.method,resumo:{pecas:pp.summary.pieces,modelos:pp.summary.models,urgenciaAlta:pp.summary.alta,valorAPrecoDeVenda:pp.summary.value},modelos:pp.suggestions.slice(0,15).map(x=>({modelo:clip(x.model,80),referencia:x.reference,categoria:x.category,urgencia:x.urgency,curva:x.abc,vendeu:x.sold,saldoRede:x.stock,coberturaDias:x.coverage,pedir:x.qty,divisao:x.split.map(y=>`${y.short} ${y.qty}`).join(' · ')})),naoRecomprar:pp.avoid.slice(0,5).map(a=>({modelo:clip(a.model,80),saldo:a.stock,motivo:a.reason})),limitacoes:pp.limitations}}
  if(p.purpose==='planning')ctx.parametrosAbastecimento={prazoFornecimentoDias:ops.leadDays,segurancaDias:ops.safetyDays,coberturaAlvoDias:ops.targetDays,rotas:(ops.routes||[]).length};
  if(p.purpose==='actions')ctx.acoesRegistradas=acoes;
  return JSON.stringify({...ctx,limitacoes:limitations});

@@ -54,15 +54,15 @@ const legacy=C.totalsToCatalog([{id:'x',store:'02',start:'2026-08-01',end:'2026-
 
 // Stock explorer: every unit's balance is preserved, category only by unambiguous reference.
 const inv=inventory({sales:[],products:[],stock,goals:[]},defaultStores,'2026-09-29');assert.equal(inv.length,7039);
-const idx=C.categoryIndex(totals),srows=C.stockToCatalog(inv,idx);assert.equal(srows.length,7039);assert.equal(round(srows.reduce((a,r)=>a+r.qty,0)),8445.2);
-const smodels=C.groupCatalog(srows);assert.equal(round(C.catalogCategories(smodels).reduce((a,c)=>a+c.qty,0)),8445.2);
-assert.ok(srows.some(r=>r.qty<0)&&srows.some(r=>!Number.isInteger(r.qty)),'Negativos e frações preservados');
+const idx=C.categoryIndex(totals),srows=C.stockToCatalog(inv,idx);assert.equal(srows.length,7039);const effective=round(stock.reduce((a,r)=>a+Math.max(0,r.physical),0));assert.ok(effective>8445.2,'negativos zerados aumentam o saldo efetivo');assert.equal(round(srows.reduce((a,r)=>a+r.qty,0)),effective);
+const smodels=C.groupCatalog(srows);assert.equal(round(C.catalogCategories(smodels).reduce((a,c)=>a+c.qty,0)),effective);
+assert.ok(srows.every(r=>r.qty>=0)&&srows.some(r=>!Number.isInteger(r.qty)),'negativo vira zero; frações preservadas');
 for(const r of srows){if(r.categoryStatus==='matched')assert.ok([...idx.get(r.reference)].length===1);else assert.equal(r.category,C.NO_CATEGORY)}
 const matched=new Set(srows.filter(r=>r.categoryStatus==='matched').map(r=>r.reference));assert.ok(matched.size>0);
 // Sales and stock sizes/colors converge to the same canonical labels for shared references.
 const saleVariants=new Set(rows.map(r=>`${r.reference}|${r.color}|${r.size}`)),stockVariants=new Set(srows.map(r=>`${r.reference}|${r.color}|${r.size}`));
 const shared=[...saleVariants].filter(k=>stockVariants.has(k));assert.ok(shared.length>rows.length*0.5,`variações em comum: ${shared.length}`);
 assert.ok(inv.every(r=>r.status!=='idle'),'Sem vendas transacionais o status é “sem histórico”, não “sem venda”.');
-assert.ok(inv.filter(r=>r.physical<0).every(r=>r.status==='negative'||r.status==='outdated'));
+assert.ok(inv.filter(r=>r.reported<0).every(r=>r.physical===0&&(r.status==='out'||r.status==='outdated')),'negativo = sem saldo');
 await fs.rm(tmp,{recursive:true,force:true});
 console.log(`Passed: ${models.length} modelos de vendas em ${cats.length} categorias; CALÇAS ${calcas.length} modelos (${jeans.length} “JEANS RETO MONDEPARS” distintos); grade = detalhe = resumo; estoque ${smodels.length} modelos, ${matched.size} referências com categoria inequívoca; ${shared.length} variações casam vendas × estoque.`);

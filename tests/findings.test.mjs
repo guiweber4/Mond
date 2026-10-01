@@ -29,4 +29,9 @@ const rep=R.consolidatedReport(totals,defaultStores,'2026-09-01','2026-09-30','a
 assert.equal(rep.revenue,2268565.55);assert.equal(rep.units,2681);assert.ok(rep.products.length<=10&&rep.categories.length<=8&&rep.attention.length<=6);
 assert.ok(JSON.stringify(rep).length<20000,'relatório enxuto');assert.ok(rep.summary.some(s=>/RJ/.test(s)),'avisa unidade sem arquivo');assert.equal(rep.stock.length,3);
 const jk=R.consolidatedReport(totals,defaultStores,'2026-09-01','2026-09-30','02',{stock,today:'2026-09-30'});assert.equal(jk.revenue,1291617.77);assert.ok(jk.stock.every(s=>s.name.startsWith('JK')));
-await h.cleanup();console.log(`Passed: ${out.length} achados (${out.filter(f=>f.priority==='alta').length} alta), transferências dentro do saldo livre da origem, RJ como falta de dados, relatório consolidado enxuto e conciliado.`);
+// Visual overview and executive deck with the real files: same totals as the consolidated report.
+const O=await h.load('overview-data'),D=await h.load('executive-deck');const ov=O.overviewData({totals,stock,stores:defaultStores});
+assert.equal(ov.amount,2268565.55);assert.equal(ov.units,2681);assert.equal(Math.round(ov.categories.reduce((x,c)=>x+c.amount,0)*100)/100,2268565.55);assert.equal(ov.highlights.length,8);
+assert.ok(Math.abs(ov.sizeCurve.reduce((x,c)=>x+c.sold,0)-100)<=1.5,'curva de tamanhos ≈ 100%');assert.equal(ov.stockHealth.length,3);
+const deck=D.buildDeck({totals,stock,stores:defaultStores,today:'2026-09-30'});assert.equal(deck.slides.length,8);assert.equal(deck.slides[0].data.kpis[0].value,'R$ 2,27 mi');assert.ok(JSON.stringify(deck).length<40000,'apresentação enxuta');
+await h.cleanup();console.log(`Passed: ${out.length} achados (${out.filter(f=>f.priority==='alta').length} alta), transferências dentro do saldo livre da origem, RJ como falta de dados, relatório consolidado enxuto e conciliado, Visão geral e apresentação com os mesmos totais.`);

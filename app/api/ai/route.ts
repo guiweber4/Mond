@@ -6,6 +6,7 @@ import {today} from '@/lib/model';
 import {aiEnv,requireAdmin,aiLimit,runProfile,routing,generate} from '@/lib/ai-server';
 import {sealKey,validateProfile,purposes,type Purpose} from '@/lib/ai-core';
 import {buildContext,parseSlides} from '@/lib/ai-context';
+import {buildDeck,deckContext,mergeDeckText} from '@/lib/executive-deck';
 import {requireUser} from '@/lib/auth';
 export const maxDuration=120;
 import {defaultStores,type Store} from '@/lib/model';
@@ -25,7 +26,9 @@ export async function POST(req:Request){try{const peek=await req.clone().json().
  const settings=await db.prepare("SELECT id,payload FROM settings WHERE id IN ('stores','operations','insights','reference_aliases','reference_types')").all<{id:string;payload:string}>(),cfg=Object.fromEntries(settings.results.map(r=>[r.id,JSON.parse(r.payload)]));const allStores:Store[]=cfg.stores||defaultStores,stores=allowed?allStores.filter(s=>allowed.includes(s.id)):allStores;if(b.channel!=='all'&&!stores.some(s=>s.id===b.channel))throw new Error('Canal inválido.');
  let report:any=null;if(purpose==='report'){if(typeof b.reportId!=='string')throw new Error('Escolha um relatório salvo.');const row=await db.prepare('SELECT id,payload FROM reports WHERE id=?').bind(b.reportId).first<{id:string;payload:string}>();if(!row)throw new Error('Relatório não encontrado.');if(!reportAllowed(row.payload,allowed,new Map(allStores.map(s=>[s.id,s.name]))))throw new Error('Relatório não encontrado.');report=JSON.parse(row.payload)}
  const data=restrictData(b.dataset==='demo'?demoOperationalData():await readRecords(),allowed);const ops=b.dataset==='demo'?demoOps:cfg.operations||defaultOps,saved=(await db.prepare('SELECT dataset,status,payload FROM actions').all<{dataset:string;status:string;payload:string}>()).results;
- const context=buildContext({purpose,dataset:b.dataset,start:b.start,end:b.end,channel:b.channel,period:typeof b.period==='string'?b.period:undefined,report},data,stores,ops,saved,{today:today(),config:cfg.insights,tables:{aliases:cfg.reference_aliases,types:cfg.reference_types}});
+ // Executive deck: slides computed from the data; the model only rewrites each slide's message (demo keeps the text format).
+ const deck=purpose==='executive'?buildDeck({totals:data.totals||[],stock:data.stock,stores,channel:b.channel,today:today(),saved,goals:data.goals,config:cfg.insights,tables:{aliases:cfg.reference_aliases,types:cfg.reference_types}}):null;
+ const context=deck?deckContext(deck):buildContext({purpose,dataset:b.dataset,start:b.start,end:b.end,channel:b.channel,period:typeof b.period==='string'?b.period:undefined,report},data,stores,ops,saved,{today:today(),config:cfg.insights,tables:{aliases:cfg.reference_aliases,types:cfg.reference_types}});
  if(purpose!=='report'&&!data.sales.length&&!(data.totals||[]).length&&!data.stock.length)throw new Error('Importe vendas ou estoque antes de gerar com IA.');
  const result=await generate(context,b.dataset,purpose);
  // Numbers the model wrote that are not in the context are flagged; dataVersion marks the reading outdated after new imports.
@@ -33,6 +36,7 @@ export async function POST(req:Request){try{const peek=await req.clone().json().
  const createdAt=new Date().toISOString(),ai={text:result.text,provider:result.provider,model:result.model,createdAt,by:user.email,unverified,dataVersion:version};
  // Persist where the team will look for it: inside the report, or as a new saved report.
  if(purpose==='report'){await db.prepare('UPDATE reports SET payload=? WHERE id=?').bind(JSON.stringify({...report,ai}),b.reportId).run();return json({...result,unverified,dataVersion:version,purpose,reportId:b.reportId})}
+ if(purpose==='executive'&&deck){const merged=mergeDeckText(deck,result.text,context),id=crypto.randomUUID(),title=`Apresentação executiva · ${deck.period}`;await db.prepare('INSERT INTO reports(id,dataset,title,created_at,payload) VALUES(?,?,?,?,?)').bind(id,b.dataset,title,createdAt,JSON.stringify({kind:'executive',version:2,dataset:b.dataset,type:'Apresentação executiva',period:deck.period,channel:b.channel==='all'?undefined:stores.find(s=>s.id===b.channel)?.name,createdAt,deck:merged,ai})).run();return json({...result,unverified,dataVersion:version,purpose,deck:merged,reportId:id})}
  if(purpose==='executive'){const slides=parseSlides(result.text);if(!slides.length)throw new Error('O modelo não devolveu os slides no formato esperado. Gere novamente.');const id=crypto.randomUUID(),title=`Apresentação executiva · ${new Date(createdAt).toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'})}`;await db.prepare('INSERT INTO reports(id,dataset,title,created_at,payload) VALUES(?,?,?,?,?)').bind(id,b.dataset,title,createdAt,JSON.stringify({kind:'executive',dataset:b.dataset,type:'Apresentação executiva',period:title,createdAt,slides,ai})).run();return json({...result,unverified,dataVersion:version,purpose,slides,reportId:id})}
  return json({...result,unverified,dataVersion:version,purpose});
  }catch(e){return json({error:e instanceof Error?e.message:'Não foi possível concluir a solicitação.'},400)}}

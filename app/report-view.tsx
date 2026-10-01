@@ -1,6 +1,8 @@
 'use client';
 import {Lightbulb} from 'lucide-react';
-import {SlideDeck,Markdown} from './ai-assist';
+import {Markdown} from './ai-assist';
+import SlideViewer,{toSlides} from './slide-viewer';
+import type {Store} from '@/lib/model';
 /* eslint-disable @typescript-eslint/no-explicit-any -- saved report payloads come in several historical shapes */
 const brl=(n:number)=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
 const brlc=(n:number)=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
@@ -10,10 +12,10 @@ const when=(s:string)=>new Date(s).toLocaleString('pt-BR',{timeZone:'America/Sao
 function Bar({value,max}:{value:number;max:number}){return <span className="rv-bar" aria-hidden="true"><i style={{width:`${max>0?Math.max(2,Math.min(100,value/max*100)):0}%`}}/></span>}
 function AIBlock({ai,dataVersion}:{ai:any;dataVersion?:string}){if(!ai)return null;return <section className="rv-section"><h2>Leitura da IA</h2>{dataVersion&&ai.dataVersion&&ai.dataVersion!==dataVersion&&<p className="warn-box">Novas importações depois desta leitura: os números podem ter mudado. Gere a leitura novamente.</p>}<Markdown text={ai.text}/>{ai.unverified?.length>0&&<p className="warn-box">Números no texto que não aparecem nos dados calculados: {ai.unverified.join(', ')}.</p>}<p className="rv-meta">{ai.provider} · {ai.model} · {when(ai.createdAt)}. Consultiva; revise antes de decidir.</p></section>}
 /** Printable report. Reads current (v2) and historical payloads. */
-export default function ReportView({report,dataVersion}:{report:any;dataVersion?:string}){
+export default function ReportView({report,dataVersion,stores=[]}:{report:any;dataVersion?:string;stores?:Store[]}){
  if(!report)return null;
  const head=(eyebrow:string,title:string)=><header className="rv-head"><div className="report-brand">MONDEPARS <span>INTELLIGENCE</span></div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p className="rv-sub">{report.period}{report.channel?` · ${report.channel}`:''}</p></header>;
- if(report.kind==='executive')return <article className="report-preview">{head('APRESENTAÇÃO EXECUTIVA · GERADA COM IA','Apresentação executiva')}<SlideDeck slides={report.slides||[]}/><footer>{report.ai?.provider} · {report.ai?.model}. Leitura consultiva baseada nos números calculados pelo sistema; revise antes de apresentar.</footer></article>;
+ if(report.kind==='executive')return <article className="report-preview exec">{head(report.ai?'APRESENTAÇÃO EXECUTIVA · TEXTO REVISADO COM IA':'APRESENTAÇÃO EXECUTIVA · NÚMEROS CALCULADOS','Apresentação executiva')}<SlideViewer slides={toSlides(report.deck,report.slides)} stores={stores}/><footer className="no-print">{report.ai?`${report.ai.provider} · ${report.ai.model}. Texto revisado com IA sobre os números calculados pelo sistema; revise antes de apresentar.`:'Slides montados só com os números calculados pelo sistema.'}{dataVersion&&report.ai?.dataVersion&&report.ai.dataVersion!==dataVersion?' Houve novas importações depois desta apresentação.':''}</footer></article>;
  const totals=report.kind==='totals',money=totals?brl:brlc,channels:any[]=(report.channels||[]).filter((c:any)=>c.revenue!==undefined),maxCh=Math.max(0,...channels.map((c:any)=>c.revenue||0));
  const summary:string[]=report.summary||report.insights||[],products:any[]=(report.products||[]).slice(0,10),cats:any[]=report.categories||[],maxCat=Math.max(0,...cats.map((c:any)=>c.amount));
  return <article className="report-preview">

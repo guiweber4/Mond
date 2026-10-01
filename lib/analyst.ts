@@ -87,7 +87,7 @@ export function verifyNumbers(text:string,context:string){
  const known:number[]=[];const walk=(v:unknown)=>{if(typeof v==='number')known.push(v);else if(typeof v==='string'){for(const m of v.matchAll(/-?\d{1,3}(?:\.\d{3})+(?:,\d+)?|-?\d+(?:[.,]\d+)?/g))known.push(parseBR(m[0]))}else if(v&&typeof v==='object')Object.values(v).forEach(walk)};try{walk(JSON.parse(context))}catch{walk(context)}
  const clean=text.replace(/\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/g,' ').replace(/\b(19|20)\d{2}\b/g,' ');
  const out:string[]=[];for(const m of clean.matchAll(/(-?\d{1,3}(?:\.\d{3})+(?:,\d+)?|-?\d+(?:,\d+)?)(\s*(mi|milhões|milhão|mil)\b)?/gi)){
-  const v=Math.abs(parseBR(m[1])),scale=/^mi/i.test(m[3]||'')?1e6:/^mil$/i.test(m[3]||'')?1e3:1,dec=(m[1].split(',')[1]||'').length;if(scale===1&&v<=12&&!dec)continue;
+  const v=Math.abs(parseBR(m[1])),scale=/^mil$/i.test(m[3]||'')?1e3:/^mi/i.test(m[3]||'')?1e6:1,dec=(m[1].split(',')[1]||'').length;if(scale===1&&v<=12&&!dec)continue;
   // Printed with `dec` decimals at `scale`: any context number that rounds to it (or the same literal) is a match.
   const tol=0.5*10**-dec+1e-9;if(!known.some(k=>Math.abs(Math.abs(k)/scale-v)<=tol||Math.abs(Math.abs(k)-v)<=tol))out.push(m[0].trim())}
  return [...new Set(out)].slice(0,10);

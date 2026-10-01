@@ -5,12 +5,13 @@ import {catalogCategories,filterCatalog,gradeMatrix,groupCatalog,cellKey,searchK
 import {dayBR} from '@/lib/model';
 const quantity=(n:number)=>n.toLocaleString('pt-BR',{maximumFractionDigits:3});
 const currency=(n:number)=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
-const PAGE=12,DETAIL=15;
+const PAGE=10,DETAIL=15;
 type Mode='sales'|'stock';
 const unitLabel=(mode:Mode)=>mode==='stock'?'saldo informado':'peças líquidas (QT)';
 /** Category → model → color/size grade → detail. Sales show QT and VALOR; stock shows Saldo Base. Never mixed. */
-export default function CatalogExplorer({rows,mode,title,context,category:controlled,onCategoryChange}:{rows:CatalogRow[];mode:Mode;title?:string;context?:string;category?:string;onCategoryChange?:(v:string)=>void}){
- const [own,setOwn]=useState(''),[selected,setSelected]=useState(''),[query,setQuery]=useState(''),[modelQuery,setModelQuery]=useState(''),[sort,setSort]=useState(mode==='stock'?'qty':'amount'),[page,setPage]=useState(1),[expanded,setExpanded]=useState('');const labelId=useId();
+export default function CatalogExplorer({rows,mode,title,context,category:controlled,onCategoryChange,initialModel=''}:{rows:CatalogRow[];mode:Mode;title?:string;context?:string;category?:string;onCategoryChange?:(v:string)=>void;initialModel?:string}){
+ // Model keys are the cleaned reference (see groupCatalog), so a reference from another screen opens the same model.
+ const [own,setOwn]=useState(''),[selected,setSelected]=useState(initialModel.trim().replace(/\s+/g,' ')),[query,setQuery]=useState(''),[modelQuery,setModelQuery]=useState(''),[sort,setSort]=useState(mode==='stock'?'qty':'amount'),[page,setPage]=useState(1),[expanded,setExpanded]=useState('');const labelId=useId();
  const category=controlled??own,setCategory=onCategoryChange??setOwn;
  const models=groupCatalog(rows),categories=catalogCategories(models).sort((a,b)=>mode==='sales'?b.amount-a.amount:b.qty-a.qty);
  // Filters that no longer exist after a period/unit change are reconciled instead of producing an empty contradictory view.

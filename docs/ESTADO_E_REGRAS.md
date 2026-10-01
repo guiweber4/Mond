@@ -133,3 +133,41 @@ Pendências desta etapa: provisionar o projeto Supabase e o projeto Vercel (exig
 ## Motor de insights (02/10/2026)
 
 Camadas de dados confiáveis, métricas, diagnósticos, interpretação e acompanhamento. Os detalhes, o que já funciona, o que depende de novas fontes e a configuração (`STORE_ACCESS`, `settings.insights`, `reference_aliases`, `reference_types`) estão em `docs/MOTOR_DE_INSIGHTS.md`. Sem migração de banco.
+
+## Rodada de UX/UI (01/10/2026)
+
+- **Visão geral** com abas Resumo · Diagnóstico · Perguntar. Resumo visual (`app/overview-visual.tsx`, dados em `lib/overview-data.ts`):
+  - indicadores, rosca por unidade e barras por categoria;
+  - peças em destaque com cores, tamanhos e saldo por unidade (sem saldo / pouco saldo / não consta);
+  - curva de tamanhos venda × estoque, saúde do estoque, faixas de preço e cores mais vendidas.
+  - Cores de unidade fixas e validadas para daltonismo (`lib/viz-palette.ts`); amostra de cor pelo nome, com cor desconhecida em neutro (`lib/color-swatch.ts`).
+- **Apresentação executiva** (`lib/executive-deck.ts`, `app/slide-viewer.tsx`):
+  - 8 slides montados com os números calculados; a IA só reescreve a mensagem de cada slide, casada por id, com os números conferidos.
+  - "Gerar com os números" funciona sem chave de IA.
+  - Um slide por vez, tela cheia, PDF em A4 paisagem, uma página por slide. Apresentações antigas continuam abrindo.
+- **Menos rolagem**:
+  - Cards de achados em grupos (3 por grupo, 1 no celular; grupos só de prioridade baixa ficam recolhidos), atalhos por grupo e modo Lista.
+  - Plano de ação sem os grupos que já têm tela própria.
+  - Estoque em abas, 20 linhas por página.
+  - Explorador com 10 modelos por página.
+  - Relatórios em abas; avisos longos recolhidos.
+- **Navegação**:
+  - Faixa de contexto fixa (unidade, período de vendas, datas de estoque, última importação).
+  - Busca global Ctrl/⌘+K (modelo, categoria, tela, perguntas).
+  - Contadores de prioridade no menu e "voltar ao topo".
+  - Tela, aba, unidade, filtros do explorador e dos achados ficam na URL; o botão Voltar funciona.
+
+Altura das telas em 1440×900, em telas de rolagem (antes → depois):
+
+| Tela | Antes | Depois |
+|---|---|---|
+| Visão geral | 5,4 | 2,9 |
+| Vendas consolidadas | 4,3 | 3,5 |
+| Estoque | 6,6 | 2,2 |
+| Abastecimento | 2,7 | 2,5 |
+| Plano de ação | 2,6 | 3,2 |
+| Qualidade dos dados | 3,0 | 2,8 |
+
+O Plano de ação mostra agora todos os 74 achados agrupados; antes só os 12 primeiros apareciam, e o resto ficava atrás de "Mostrar mais".
+
+Testes: `tests/visual.test.mjs` (dados sintéticos, em `pnpm test`) e verificação com as planilhas em `tests/findings.test.mjs`.

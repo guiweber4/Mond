@@ -1,14 +1,16 @@
 'use client';
-import {useState} from 'react';
+import {useState,useEffect,useRef} from 'react';
 import {MessageSquareText,Sparkles,RefreshCw,Send} from 'lucide-react';
 import {requestJson} from '@/lib/request';
 import {exampleQuestions,type Answer} from '@/lib/analyst';
 import {Markdown} from './ai-assist';
 type Result={answer:Answer;ai?:{text:string;provider:string;model:string;unverified:string[]};aiError?:string};
 /** Questions answered by the rules engine first; AI (optional) only rewrites the computed answer. */
-export default function AnalystPanel({channel}:{channel:string}){
+export default function AnalystPanel({channel,initial=''}:{channel:string;initial?:string}){
  const [q,setQ]=useState(''),[busy,setBusy]=useState(''),[error,setError]=useState(''),[r,setR]=useState<Result|null>(null);
  async function ask(question:string,withAI=false){if(!question.trim())return;setQ(question);setBusy(withAI?'ai':'rules');setError('');try{setR(await requestJson('/api/insights',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'ask',question,channel,withAI})},withAI?110000:30000) as Result)}catch(e){setError((e as Error).message)}finally{setBusy('')}}
+ // A question picked in the global search is asked once on arrival.
+ const asked=useRef('');useEffect(()=>{if(initial&&asked.current!==initial){asked.current=initial;ask(initial.replace(/#\d+$/,''))}},[initial]);// eslint-disable-line react-hooks/exhaustive-deps
  const a=r?.answer;
  return <section className="panel analyst-panel" aria-busy={!!busy}>
   <div className="panel-head"><div><span className="eyebrow">ANALISTA</span><h2>Pergunte sobre vendas e estoque</h2><p>A resposta vem das regras e dos números calculados, com período, unidades, fatos, hipóteses e limites. A IA é opcional e só redige a mesma resposta.</p></div></div>

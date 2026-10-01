@@ -58,6 +58,7 @@ export function readiness(i:ReadinessInput){
  const notYetOpen=i.stores.filter(s=>s.status==='open'&&s.opened&&cur&&s.opened>cur.start);for(const s of notYetOpen)limitations.push(`${s.name} abriu em ${br(s.opened)}, depois do início do período: resultado parcial.`);
  if(cur&&!prev)limitations.push('Sem período anterior equivalente importado: variações e rankings de mudança não são calculados.');
  if(soldRefs&&refsWithLine<soldRefs)limitations.push(`${soldRefs-refsWithLine} de ${soldRefs} referências vendidas não aparecem no arquivo de estoque da própria unidade (saldo não informado, diferente de zero).`);
+ const zeroed=stock.filter(s=>(s.reported??0)<0).length;if(zeroed)limitations.push(`${zeroed} variações vieram negativas e foram consideradas zero (venda antes do lançamento da entrada).`);
  if(!reconciled)limitations.push('Totais por unidade, categoria e modelo não conferem com o consolidado.');
  if(overlaps.length)limitations.push('Há períodos sobrepostos para a mesma unidade; cada análise usa um único período, sem somá-los.');
  const stockAligned=cur?stockDates.filter(s=>Math.abs(days(cur.end,s.date)-1)<=stale):[];
@@ -73,6 +74,6 @@ export function readiness(i:ReadinessInput){
   cap('compras','Coleções e compras',i.purchases?'parcial':'indisponivel',i.purchases?'Pedidos de compra importados.':'Sem pedidos, recebimentos ou plano de coleção.',[...(i.purchases?[]:['Pedidos de compra e recebimentos']),'Plano de coleção / OTB',...(i.collections?[]:['Coleção por produto'])]),
   cap('apostas','Apostas da coleção','indisponivel','Nenhuma aposta comercial cadastrada.',['Cadastro de apostas por referência']),
  ];
- return {period:cur,previous:prev,yearAgo:yoy,periods,stockDates,salesStores,stockStores,sources,lastUpdate,overlaps,reconciliation:{ok:reconciled,...rec},stockMatch:{soldRefs,refsWithLine},returns:a?{negativeRows:a.negativeRows.length,adjustments:a.adjustments.length,negativeAmount:Math.round(a.negativeRows.reduce((s,r)=>s+Math.min(0,r.amount),0)*100)/100}:null,goals:hasGoals,transactional:!!i.sales,capabilities,limitations};
+ return {negativeAsZero:stock.filter(s=>(s.reported??0)<0).length,period:cur,previous:prev,yearAgo:yoy,periods,stockDates,salesStores,stockStores,sources,lastUpdate,overlaps,reconciliation:{ok:reconciled,...rec},stockMatch:{soldRefs,refsWithLine},returns:a?{negativeRows:a.negativeRows.length,adjustments:a.adjustments.length,negativeAmount:Math.round(a.negativeRows.reduce((s,r)=>s+Math.min(0,r.amount),0)*100)/100}:null,goals:hasGoals,transactional:!!i.sales,capabilities,limitations};
 }
 export type Readiness=ReturnType<typeof readiness>;

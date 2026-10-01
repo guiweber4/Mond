@@ -171,3 +171,24 @@ Altura das telas em 1440×900, em telas de rolagem (antes → depois):
 O Plano de ação mostra agora todos os 74 achados agrupados; antes só os 12 primeiros apareciam, e o resto ficava atrás de "Mostrar mais".
 
 Testes: `tests/visual.test.mjs` (dados sintéticos, em `pnpm test`) e verificação com as planilhas em `tests/findings.test.mjs`.
+
+## Saldo negativo e racional de compras (01/10/2026)
+
+**Saldo negativo = zero.** Negativo é venda feita antes do lançamento da entrada; o time lança depois e o saldo zera.
+- Todas as análises leem o negativo como zero, variante a variante, antes de somar (`asEffective` em `lib/model.ts`, aplicado em `latestStock` e `inventory`).
+- O valor original fica em `reported` e no arquivo importado, que não muda.
+- Não há mais cards de "saldo negativo". Qualidade dos dados mostra uma linha informativa com a contagem.
+
+**Racional de compras** (`lib/purchasing.ts`, aba Plano de ação › Compras):
+- Por variante (referência × cor × tamanho), na rede: `pedido = venda por dia × (entrega + cobertura + segurança) − saldo da rede − pedidos em aberto`.
+- A venda por dia é a média dos últimos até 3 períodos equivalentes. Padrão: 45 + 30 + 7 = 82 dias e mínimo de 2 peças vendidas no período, editáveis na tela (salvos em `settings.operations`, `purchaseMinQty`).
+- A quantidade é dividida por unidade conforme a falta de cada uma.
+- Urgência:
+  - alta = sem saldo na rede ou acaba antes da entrega;
+  - média = variação vendida sem saldo ou cobertura menor que entrega + segurança.
+- Curva ABC por valor.
+- Valor a preço médio de venda: sem custo nos arquivos, não é orçamento.
+- "Não repor" vale até os números mudarem. Há exportação em Excel e a lista "Não recomprar agora".
+- Limites declarados na tela: venda observada não é demanda; com um único período não há sazonalidade; sem pedidos em aberto, sem custo e sem continuidade de coleção.
+- Também alimenta a IA (Plano de ação e Abastecimento) e o analista ("o que devemos comprar?").
+- Teste: `tests/purchasing.test.mjs`.

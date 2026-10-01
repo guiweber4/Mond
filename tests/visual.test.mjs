@@ -23,7 +23,7 @@ assert.equal(o.highlights[0].reference,'7 TR0001','maior valor primeiro');assert
 const jeans=o.highlights.find(x=>x.reference==='1 CC0006');assert.equal(jeans.stores.find(s=>s.id==='02').state,'sem_saldo','linha com 0 = sem saldo');assert.deepEqual(jeans.sizes.map(z=>z.label),['38','40']);assert.deepEqual(jeans.colors,[{label:'CHUMBO',qty:8}]);
 const trench=o.highlights.find(x=>x.reference==='7 TR0001');assert.equal(trench.stores.find(s=>s.id==='03').state,'nao_consta','sem linha = não consta');assert.equal(trench.stores.find(s=>s.id==='02').balance,12);
 const camisa=o.highlights.find(x=>x.reference==='5 CM0001');assert.equal(camisa.stores.find(s=>s.id==='BC').state,'baixo','STR ≥ limite do motor = pouco saldo');
-assert.equal(o.stockHealth.find(s=>s.id==='03').negative,1);assert.equal(o.priceBands.reduce((s,b)=>s+b.models,0),o.highlights.length,'cada modelo em uma faixa');
+{const ec=o.stockHealth.find(s=>s.id==='03');assert.equal(ec.zero,1,'saldo −3 conta como zerado');assert.equal(ec.balance,0,'negativo não reduz o saldo')}assert.equal(o.priceBands.reduce((s,b)=>s+b.models,0),o.highlights.length,'cada modelo em uma faixa');
 assert.equal(O.overviewData({totals:[],stock,stores:defaultStores}),null);
 // ---- Executive deck: computed slides, AI text merged per id with fallback and number check.
 const deck=D.buildDeck({totals,stock,stores:defaultStores,today:'2026-10-01'});assert.equal(deck.slides.length,8);assert.equal(new Set(deck.slides.map(s=>s.id)).size,8,'ids únicos');

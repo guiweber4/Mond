@@ -20,10 +20,10 @@ const rank={alta:0,media:1,baixa:2};assert.ok(out.every((f,i)=>i===0||rank[out[i
 // RJ has no files: data findings instead of fake zeros.
 assert.ok(out.some(f=>f.id==='dados:vendas:05:2026-09-01|2026-09-30')&&out.some(f=>f.id==='dados:estoque:05'));assert.ok(!out.some(f=>f.kind!=='dados'&&(f.store==='05'||f.to==='05'||f.from==='05')));
 // Transfers never take more than the donor can spare (its balance minus what it sold itself).
-const bal=(store,ref)=>stock.filter(r=>r.store===store&&r.reference.trim()===ref).reduce((a,r)=>a+r.physical,0),sold=(store,ref)=>totals.filter(t=>t.store===store&&t.reference.trim()===ref).reduce((a,t)=>a+t.qty,0);
+const bal=(store,ref)=>stock.filter(r=>r.store===store&&r.reference.trim()===ref).reduce((a,r)=>a+Math.max(0,r.physical),0),sold=(store,ref)=>totals.filter(t=>t.store===store&&t.reference.trim()===ref).reduce((a,t)=>a+t.qty,0);
 for(const f of out.filter(f=>f.kind==='ruptura')){const b=bal(f.from,f.reference),own=sold(f.from,f.reference),spare=Math.floor(own>0?b-own:b/2);assert.ok(f.qty>=1&&f.qty<=spare,`${f.id}: ${f.qty} ≤ ${spare}`);assert.ok(bal(f.to,f.reference)<=0);assert.ok(sold(f.to,f.reference)>0)}
 const perfume=out.find(f=>f.reference==='10HO0001'&&f.to==='02');assert.ok(perfume,'PERFUME KYOTO sem saldo na JK é sinalizado');
-assert.ok(out.filter(f=>f.kind==='negativo').every(f=>/saldo negativo/i.test(f.title)&&f.metrics.length===2));
+assert.ok(!out.some(f=>f.kind==='negativo'),'saldo negativo conta como zero: sem cards de alerta');
 // Report: readable, bounded and reconciled.
 const rep=R.consolidatedReport(totals,defaultStores,'2026-09-01','2026-09-30','all',{stock,today:'2026-09-30'});
 assert.equal(rep.revenue,2268565.55);assert.equal(rep.units,2681);assert.ok(rep.products.length<=10&&rep.categories.length<=8&&rep.attention.length<=6);
@@ -34,4 +34,8 @@ const O=await h.load('overview-data'),D=await h.load('executive-deck');const ov=
 assert.equal(ov.amount,2268565.55);assert.equal(ov.units,2681);assert.equal(Math.round(ov.categories.reduce((x,c)=>x+c.amount,0)*100)/100,2268565.55);assert.equal(ov.highlights.length,8);
 assert.ok(Math.abs(ov.sizeCurve.reduce((x,c)=>x+c.sold,0)-100)<=1.5,'curva de tamanhos ≈ 100%');assert.equal(ov.stockHealth.length,3);
 const deck=D.buildDeck({totals,stock,stores:defaultStores,today:'2026-09-30'});assert.equal(deck.slides.length,8);assert.equal(deck.slides[0].data.kpis[0].value,'R$ 2,27 mi');assert.ok(JSON.stringify(deck).length<40000,'apresentação enxuta');
-await h.cleanup();console.log(`Passed: ${out.length} achados (${out.filter(f=>f.priority==='alta').length} alta), transferências dentro do saldo livre da origem, RJ como falta de dados, relatório consolidado enxuto e conciliado, Visão geral e apresentação com os mesmos totais.`);
+// Purchase rationale with the real files.
+const Pu=await h.load('purchasing');const plan=Pu.purchasePlan({totals,stock,stores:defaultStores});assert.ok(plan.summary.pieces>0&&plan.summary.models>0);
+const kyoto=plan.suggestions.find(x=>x.reference==='10HO0001');assert.ok(kyoto&&kyoto.urgency==='alta'&&kyoto.qty>0,'PERFUME KYOTO: vendeu 74, sem saldo na JK');assert.ok(Pu.purchaseRows(plan).every(r=>r.Pedir>0));
+assert.ok(plan.suggestions.every(x=>x.lines.every(l=>l.stock>=0)),'saldo da rede nunca negativo');
+await h.cleanup();console.log(`Passed: ${out.length} achados (${out.filter(f=>f.priority==='alta').length} alta), transferências dentro do saldo livre da origem, RJ como falta de dados, relatório consolidado enxuto e conciliado, Visão geral e apresentação com os mesmos totais; ${plan.summary.pieces} peças sugeridas para compra em ${plan.summary.models} modelos.`);

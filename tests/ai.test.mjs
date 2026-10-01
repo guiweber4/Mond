@@ -19,7 +19,7 @@ const params={dataset:'real',start:'2026-09-01',end:'2026-09-30',channel:'all'};
 for(const purpose of Object.keys(ai.purposes).filter(p=>p!=='report')){
  const text=ctx.buildContext({...params,purpose},data,defaultStores,defaultOps,[]),c=JSON.parse(text);
  assert.equal(c.vendasConsolidadas.valorTotalizado,2268565.55,purpose);assert.equal(c.vendasConsolidadas.pecasLiquidas,2681);
- assert.equal(Math.round(c.estoque.porUnidade.reduce((a,u)=>a+u.saldo,0)*10)/10,8445.2,'saldo por unidade preservado');
+ assert.equal(Math.round(c.estoque.porUnidade.reduce((a,u)=>a+u.saldo,0)*10)/10,Math.round(data.stock.reduce((a,r)=>a+Math.max(0,r.physical),0)*10)/10,'saldo por unidade com negativo = zero');assert.ok(c.estoque.porUnidade.some(u=>u.negativasConsideradasZero>0));
  assert.ok(c.sinaisVendasEstoque.disponivel&&c.sinaisVendasEstoque.vendeComSaldoBaixo.length>0,'sinais entre vendas e estoque');
  assert.equal(c.operacional.disponivel,false,'sem vendas diárias não há consumo/cobertura');
  assert.ok(text.length<60000,`contexto enxuto (${text.length})`);assert.ok(!/sb_secret|service_role|DATABASE_URL/i.test(text));
@@ -37,4 +37,4 @@ let calls=[];await assert.rejects(()=>ai.invokeProvider({id:'p',name:'t',provide
 let body;await ai.invokeProvider({id:'p',name:'t',provider:'openai',model:'gpt-5-mini',enabled:true},'sk-test-123456','',true,async(u,init)=>{body=JSON.parse(init.body);return Response.json({output:[{content:[{type:'output_text',text:'conexão disponível'}]}]})});assert.deepEqual(body.reasoning,{effort:'low'});assert.ok(body.max_output_tokens>=2000);
 await ai.invokeProvider({id:'p',name:'t',provider:'openai',model:'gpt-4.1-mini',enabled:true},'sk-test-123456','{}',false,async(u,init)=>{body=JSON.parse(init.body);return Response.json({output:[{content:[{type:'output_text',text:'ok'}]}]})});assert.equal(body.reasoning,undefined);
 let n=0;const retried=await ai.invokeProvider({id:'p',name:'t',provider:'openai',model:'gpt-5-mini',enabled:true},'sk-test-123456','{}',false,async()=>++n===1?Response.json({status:'incomplete',output:[]}):Response.json({output:[{content:[{type:'output_text',text:'ok na segunda'}]}]}));assert.equal(retried.text,'ok na segunda');
-await h.cleanup();console.log(`Passed: ${Object.keys(ai.purposes).length} finalidades de IA com contexto conciliado (R$ 2.268.565,55 · saldo 8.445,2), filtro por unidade, relatório enxuto, slides e envelopes OpenAI simulados.`);
+await h.cleanup();console.log(`Passed: ${Object.keys(ai.purposes).length} finalidades de IA com contexto conciliado (R$ 2.268.565,55 · saldo sem negativos), filtro por unidade, relatório enxuto, slides e envelopes OpenAI simulados.`);

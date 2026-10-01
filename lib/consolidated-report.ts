@@ -12,7 +12,7 @@ export function consolidatedReport(totals:Total[],stores:Store[],start:string,en
  const categories=a.categories.slice(0,8).map(c=>({name:c.name||'Categoria não informada',amount:c.amount,share:pct(c.amount,a.amount)}));
  const models=a.products.slice(0,10).map(p=>({sku:p.reference,model:p.description,category:p.category,qty:p.qty,amount:p.amount,share:pct(p.amount,a.amount)}));
  const stockRows=latestStock(extra.stock||[]).filter(r=>channel==='all'||r.store===channel);
- const stock=[...new Set(stockRows.map(r=>r.store))].map(id=>{const rows=stockRows.filter(r=>r.store===id);return {name:stores.find(s=>s.id===id)?.name||id,date:rows[0].date,balance:Math.round(rows.reduce((s,r)=>s+r.physical,0)*10)/10,variants:rows.length,zero:rows.filter(r=>r.physical===0).length,negative:rows.filter(r=>r.physical<0).length}});
+ const stock=[...new Set(stockRows.map(r=>r.store))].map(id=>{const rows=stockRows.filter(r=>r.store===id);return {name:stores.find(s=>s.id===id)?.name||id,date:rows[0].date,balance:Math.round(rows.reduce((s,r)=>s+r.physical,0)*10)/10,variants:rows.length,zero:rows.filter(r=>r.physical===0).length}});
  const engine=computeInsights({totals,stock:extra.stock||[],stores,today:extra.today||end,period:`${start}|${end}`,goals:extra.goals,saved:extra.saved,config:extra.config,tables:extra.tables}),inChannel=(f:{store:string;to?:string;from?:string})=>channel==='all'||f.store===channel||f.store==='all'||f.to===channel||f.from===channel;
  // Stock-dependent points only when a stock base was given (as before); analytic insights always.
  const findings=engine.insights.filter(f=>inChannel(f)&&(extra.stock||['desempenho','mix','ranking'].includes(f.kind)));
@@ -31,5 +31,5 @@ export function consolidatedReport(totals:Total[],stores:Store[],start:string,en
   channels:units.map(u=>({...u,revenue:u.revenue,units:u.units})),categories,products:models,stock,
   attention:findings.slice(0,6).map(f=>({priority:priorityLabels[f.priority],title:f.title,fact:f.fact,suggestion:f.action?`${f.action}.`:f.suggestion,hypotheses:(f.hypotheses||[]).slice(0,2).map(h=>h.text)})),
   limitations:engine.readiness.limitations,insightSnapshot:snapshotOf(engine.insights.filter(inChannel)),
-  notes:['Valores do arquivo de totalização da Presence, com sinais originais (devoluções e ajustes incluídos).','Preço médio por peça = valor ÷ peças líquidas. Ticket por pedido e evolução diária não existem neste arquivo.','Estoque = Saldo Base na data da posição, sem reservas nem trânsito.','Pontos de atenção são sugestões para validar; nada é executado automaticamente.'],actions:[]};
+  notes:['Valores do arquivo de totalização da Presence, com sinais originais (devoluções e ajustes incluídos).','Preço médio por peça = valor ÷ peças líquidas. Ticket por pedido e evolução diária não existem neste arquivo.','Estoque = Saldo Base na data da posição, sem reservas nem trânsito; saldo negativo (venda antes do lançamento da entrada) conta como zero.','Pontos de atenção são sugestões para validar; nada é executado automaticamente.'],actions:[]};
 }

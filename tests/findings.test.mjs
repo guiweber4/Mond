@@ -38,4 +38,8 @@ const deck=D.buildDeck({totals,stock,stores:defaultStores,today:'2026-09-30'});a
 const Pu=await h.load('purchasing');const plan=Pu.purchasePlan({totals,stock,stores:defaultStores});assert.ok(plan.summary.pieces>0&&plan.summary.models>0);
 const kyoto=plan.suggestions.find(x=>x.reference==='10HO0001');assert.ok(kyoto&&kyoto.urgency==='alta'&&kyoto.qty>0,'PERFUME KYOTO: vendeu 74, sem saldo na JK');assert.ok(Pu.purchaseRows(plan).every(r=>r.Pedir>0));
 assert.ok(plan.suggestions.every(x=>x.lines.every(l=>l.stock>=0)),'saldo da rede nunca negativo');
+// Chat tools with the real files.
+const DT=await h.load('data-tools');const tc=DT.toolContext({totals,stock,stores:defaultStores,today:'2026-09-30'});
+const bc=DT.runTool(tc,'consultar_vendas',{agrupar:'cor',categoria:'calcas',unidade:'BC'});assert.equal(bc.result.totalDoRecorte.valor,Math.round(totals.filter(t=>t.store==='BC'&&t.category==='CALÇAS').reduce((x,t)=>x+t.amount,0)*100)/100);
+const jkc=DT.runTool(tc,'consultar_vendas',{agrupar:'categoria',unidade:'jk',limite:30});assert.equal(jkc.result.totalDoRecorte.valor,1291617.77);assert.ok(jkc.result.linhas.some(l=>l.categoria==='CAMISETAS'));
 await h.cleanup();console.log(`Passed: ${out.length} achados (${out.filter(f=>f.priority==='alta').length} alta), transferências dentro do saldo livre da origem, RJ como falta de dados, relatório consolidado enxuto e conciliado, Visão geral e apresentação com os mesmos totais; ${plan.summary.pieces} peças sugeridas para compra em ${plan.summary.models} modelos.`);

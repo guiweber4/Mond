@@ -102,3 +102,24 @@ Não há migração de banco. Configurações opcionais:
 - A verificação de números é heurística. Ela sinaliza, não bloqueia; valores derivados pela IA (somas, diferenças) aparecem como "não localizados".
 - `STORE_ACCESS` não filtra o histórico de importações para usuários restritos (a lista é ocultada por inteiro) nem a apresentação executiva (só aparece para quem vê tudo).
 - A identificação de intenção por palavras-chave cobre as perguntas do briefing e variações próximas; perguntas fora desse padrão caem em "prioridades".
+
+## Chat de perguntas sobre a operação (02/10/2026)
+
+O painel **Visão geral › Perguntar** virou um chat. A IA configurada responde perguntas livres consultando os dados por ferramentas no servidor (`lib/data-tools.ts`, somente leitura, já restritas às unidades do usuário).
+
+| Ferramenta | Faz |
+|---|---|
+| `resumo_periodo` | Totais do período, por unidade e categoria, estoque, comparação e limitações |
+| `consultar_vendas` | Vendas agrupadas por unidade, categoria, modelo, cor ou tamanho, com filtros |
+| `consultar_estoque` | Saldo agrupado e filtrado (negativo = zero) |
+| `detalhe_modelo` | Modelo por nome ou referência: vendas e saldo por unidade, grade, sugestão de compra e achados |
+| `achados` | Insights filtrados por tipo, unidade e prioridade |
+| `sugestao_compras` | Racional de compras filtrado |
+
+Como funciona:
+- **Ciclo de consulta** (`chatWithTools` em `lib/ai-core.ts`): até 5 rodadas de consulta e 100 s no total. Funciona com OpenAI (Responses), Anthropic, Gemini e os compatíveis (Groq, DeepSeek, OpenRouter).
+- **Conferência:** os números da resposta são conferidos com o que as ferramentas devolveram. A tela mostra o que foi consultado e avisa quando há número não localizado.
+- **Sem IA configurada, ou em falha do provedor**, a resposta calculada pelas regras (`lib/analyst.ts`) aparece no lugar.
+- **Limites de uso:** uma pergunta conta 1 no limite por hora e fica registrada em `ai_runs` (finalidade `chat`). O histórico fica só na sessão do navegador, com as últimas 12 mensagens enviadas.
+- **Rota:** `POST /api/chat` com `{messages, channel}`.
+- **Teste:** `tests/chat.test.mjs`.

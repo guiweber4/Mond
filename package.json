@@ -11,7 +11,7 @@
     "start": "next start",
     "lint": "eslint . --ignore-pattern .next",
     "typecheck": "tsc --noEmit",
-    "test": "node tests/v2.test.mjs && node tests/insights.test.mjs && node tests/visual.test.mjs && node tests/purchasing.test.mjs",
+    "test": "node tests/v2.test.mjs && node tests/insights.test.mjs && node tests/visual.test.mjs && node tests/purchasing.test.mjs && node tests/chat.test.mjs",
     "test:fixtures": "node tests/detailed-import.test.mjs fixtures && node tests/stock-import.test.mjs fixtures && node tests/catalog.test.mjs fixtures && node tests/ai.test.mjs fixtures && node tests/findings.test.mjs fixtures"
   },
   "dependencies": {
